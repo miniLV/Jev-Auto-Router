@@ -31,7 +31,7 @@ export function subtractCredits(limit: string, used: string): string | undefined
   return difference < 0n ? undefined : formatScaled(difference, places);
 }
 
-export function allocateCredits(used: string, models: LocalUsage["models"]): Array<{ model: string; credits: string }> {
+export function allocateCredits(used: string, models: LocalUsage["models"]): Array<{ model: string; credits: string; share: number }> {
   const known = models.filter((entry) => Number.isSafeInteger(entry.tokens) && entry.tokens > 0);
   const totalTokens = known.reduce((total, entry) => total + entry.tokens, 0);
   if (totalTokens <= 0) return [];
@@ -49,7 +49,7 @@ export function allocateCredits(used: string, models: LocalUsage["models"]): Arr
     row.base += 1n;
     unitsLeft -= 1n;
   }
-  return rows.map((row) => ({ model: row.model, credits: formatScaled(row.base, places) }));
+  return rows.map((row) => ({ model: row.model, credits: formatScaled(row.base, places), share: row.tokens / totalTokens }));
 }
 
 export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | undefined): UsageViewModel {

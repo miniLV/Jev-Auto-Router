@@ -4,7 +4,7 @@ export type OfficialCredit =
 
 export interface UsageViewModel {
   officialCredit: OfficialCredit;
-  estimatedCreditAttribution: Array<{ model: string; credits: string }>;
+  estimatedCreditAttribution: Array<{ model: string; credits: string; share: number }>;
   attributionQuality: { status: "estimated" | "unavailable"; message: string };
 }
 
