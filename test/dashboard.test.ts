@@ -54,6 +54,7 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.match(response.body, /pointerenter/);
   assert.match(response.body, /Credit used/);
   assert.match(response.body, /Time to reset/);
+  assert.match(response.body, /transform:scaleX\(0\.03\)/);
   assert.match(response.body, /id="export-json"/);
   assert.match(response.body, /fetch\("\/api\/usage"/);
   assert.match(response.body, /codex-usage-/);
