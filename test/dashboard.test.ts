@@ -8,7 +8,10 @@ import type { SnapshotProvider, UsageViewModel } from "../src/types.js";
 let calls = 0;
 const available: UsageViewModel = {
   officialCredit: { status: "available", limit: "500.00", used: "12.34", remaining: "487.66", remainingPercent: 97, resetsAt: "2026-08-01T00:00:00.000Z" },
-  estimatedCreditAttribution: [{ model: "gpt-5.6-terra", credits: "12.34" }],
+  estimatedCreditAttribution: [
+    { model: "gpt-5.6-terra", credits: "1.23", share: 0.1 },
+    { model: "gpt-5.6-sol", credits: "11.11", share: 0.9 }
+  ],
   attributionQuality: { status: "estimated", message: "Estimated from local model-token shares; official credit remains authoritative." }
 };
 const provider: SnapshotProvider = { refresh: async () => { calls += 1; return available; } };
@@ -42,10 +45,17 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.equal(response.status, 200);
   assert.equal(calls, 1);
   assert.match(response.body, /Official Credit/);
-  assert.match(response.body, /Estimated Credit Attribution by model/);
-  assert.match(response.body, /Attribution Quality/);
-  assert.match(response.body, /<button id="refresh" type="button">Refresh<\/button>/);
-  assert.match(response.body, /addEventListener\("click",async\(\)=>\{const response=await fetch\("\/api\/refresh"/);
+  assert.match(response.body, /Model credit mix/);
+  assert.match(response.body, /Attribution quality/);
+  assert.match(response.body, /model-donut/);
+  assert.match(response.body, /id="donut-model">gpt-5\.6-sol/);
+  assert.match(response.body, /90\.0%/);
+  assert.match(response.body, /data-model=/);
+  assert.match(response.body, /pointerenter/);
+  assert.match(response.body, /Credit used/);
+  assert.match(response.body, /Time to reset/);
+  assert.match(response.body, /<button id="refresh" class="refresh" type="button">Refresh snapshot<\/button>/);
+  assert.match(response.body, /addEventListener\("click",\(\)=>location\.reload\(\)\)/);
   assert.equal(response.headers["cache-control"], "no-store");
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   const nonce = /<script nonce="([^"]+)">/.exec(response.body)?.[1];

@@ -52,9 +52,9 @@ test("estimated rows use deterministic largest remainder and sum to official cre
     { model: "gpt-5.6", tokens: 1 }
   ]);
   assert.deepEqual(allocation, [
-    { model: "gpt-5.6-sol", credits: "0.34" },
-    { model: "gpt-5.6-terra", credits: "0.33" },
-    { model: "gpt-5.6", credits: "0.33" }
+    { model: "gpt-5.6-sol", credits: "0.34", share: 1 / 3 },
+    { model: "gpt-5.6-terra", credits: "0.33", share: 1 / 3 },
+    { model: "gpt-5.6", credits: "0.33", share: 1 / 3 }
   ]);
   assert.equal(allocation.reduce((total, row) => total + BigInt(row.credits.replace(".", "")), 0n), 100n);
 });
