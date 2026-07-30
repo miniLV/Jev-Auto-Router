@@ -60,7 +60,7 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.match(body, /pointerenter/);
   assert.match(body, /Credit used/);
   assert.match(body, /Time to reset/);
-  assert.match(body, /3\.0% used/);
+  assert.match(body, /97\.0% remaining/);
   assert.match(body, /transform:scaleX\(0\.03\)/);
   assert.match(body, /\.credit-progress span\{transform:scaleX\(0\.03\)\}/);
   assert.doesNotMatch(body, /style="transform:/);
