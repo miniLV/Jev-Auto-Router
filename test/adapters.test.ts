@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { hasValidUsage, normalizeRateLimits } from "../src/app-server.js";
 import { aggregateCcusage, buildCcusageArgs } from "../src/local.js";
-import { allocateCredits } from "../src/credit.js";
+import { allocateCredits, makeViewModel } from "../src/credit.js";
 
 test("rate limits prefer the codex limit and reject incomplete values", () => {
   assert.deepEqual(normalizeRateLimits({
@@ -45,16 +45,33 @@ test("usage requires the exact summary and dailyUsageBuckets token shape", () =>
   assert.equal(hasValidUsage({ summary, buckets: [{ startDate: "2026-07-30", tokens: 3 }] }), false);
 });
 
-test("estimated rows use deterministic largest remainder and sum to official credit", () => {
+test("estimated rows use deterministic largest remainder and sum to the integer official credit", () => {
   const allocation = allocateCredits("1.00", [
     { model: "gpt-5.6-sol", tokens: 1 },
     { model: "gpt-5.6-terra", tokens: 1 },
     { model: "gpt-5.6", tokens: 1 }
   ]);
   assert.deepEqual(allocation, [
-    { model: "gpt-5.6-sol", credits: "0.34", share: 1 / 3 },
-    { model: "gpt-5.6-terra", credits: "0.33", share: 1 / 3 },
-    { model: "gpt-5.6", credits: "0.33", share: 1 / 3 }
+    { model: "gpt-5.6-sol", credits: "1", share: 1 / 3 },
+    { model: "gpt-5.6-terra", credits: "0", share: 1 / 3 },
+    { model: "gpt-5.6", credits: "0", share: 1 / 3 }
   ]);
-  assert.equal(allocation.reduce((total, row) => total + BigInt(row.credits.replace(".", "")), 0n), 100n);
+  assert.equal(allocation.reduce((total, row) => total + BigInt(row.credits), 0n), 1n);
+});
+
+test("the public view model rounds every credit value to an integer before export or rendering", () => {
+  const view = makeViewModel({
+    rateLimit: { limit: "500.49", used: "12.50", remaining: "487.99", remainingPercent: 97.5, resetsAt: "2026-08-01T00:00:00.000Z" },
+    usageAvailable: true
+  }, {
+    models: [{ model: "gpt-5.6-sol", tokens: 2 }, { model: "gpt-5.6-terra", tokens: 1 }],
+    skippedEntries: 0
+  }, { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" });
+  assert.deepEqual(view.officialCredit, {
+    status: "available", limit: "500", used: "13", remaining: "487", remainingPercent: 97.5, resetsAt: "2026-08-01T00:00:00.000Z"
+  });
+  assert.deepEqual(view.estimatedCreditAttribution, [
+    { model: "gpt-5.6-sol", credits: "9", share: 2 / 3 },
+    { model: "gpt-5.6-terra", credits: "4", share: 1 / 3 }
+  ]);
 });

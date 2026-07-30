@@ -16,13 +16,14 @@ function scaleDecimal(value: string, places: number): bigint {
 }
 
 function formatScaled(value: bigint, places: number): string {
+  if (places === 0) return value.toString();
   const divisor = 10n ** BigInt(places);
   return `${value / divisor}.${(value % divisor).toString().padStart(places, "0")}`;
 }
 
 export function displayCredit(value: string): string {
   const { whole, fraction } = decimalParts(value);
-  return `${whole}.${fraction.padEnd(Math.max(2, fraction.length), "0")}`;
+  return (BigInt(whole) + (fraction[0] >= "5" ? 1n : 0n)).toString();
 }
 
 export function subtractCredits(limit: string, used: string): string | undefined {
@@ -36,8 +37,8 @@ export function allocateCredits(used: string, models: LocalUsage["models"]): Arr
   const totalTokens = known.reduce((total, entry) => total + entry.tokens, 0);
   if (totalTokens <= 0) return [];
 
-  const places = Math.max(2, decimalPlaces(used));
-  const totalMinor = scaleDecimal(used, places);
+  const places = 0;
+  const totalMinor = scaleDecimal(displayCredit(used), places);
   const denominator = BigInt(totalTokens);
   const rows = known.map((entry, index) => {
     const numerator = totalMinor * BigInt(entry.tokens);
@@ -62,11 +63,13 @@ export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | un
     };
   }
   const rate = official.rateLimit;
+  const limit = displayCredit(rate.limit);
+  const used = displayCredit(rate.used);
   const officialCredit = {
     status: "available" as const,
-    limit: displayCredit(rate.limit),
-    used: displayCredit(rate.used),
-    remaining: displayCredit(rate.remaining),
+    limit,
+    used,
+    remaining: (BigInt(limit) - BigInt(used)).toString(),
     remainingPercent: rate.remainingPercent,
     resetsAt: rate.resetsAt
   };
@@ -81,7 +84,7 @@ export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | un
   return {
     observationWindow,
     officialCredit,
-    estimatedCreditAttribution: allocateCredits(rate.used, local.models),
+    estimatedCreditAttribution: allocateCredits(used, local.models),
     attributionQuality: {
       status: "estimated",
       message: official.usageAvailable
