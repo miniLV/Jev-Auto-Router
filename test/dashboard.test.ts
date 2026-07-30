@@ -7,6 +7,7 @@ import type { SnapshotProvider, UsageViewModel } from "../src/types.js";
 
 let calls = 0;
 const available: UsageViewModel = {
+  observationWindow: { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" },
   officialCredit: { status: "available", limit: "500.00", used: "12.34", remaining: "487.66", remainingPercent: 97, resetsAt: "2026-08-01T00:00:00.000Z" },
   estimatedCreditAttribution: [
     { model: "gpt-5.6-terra", credits: "1.23", share: 0.1 },
@@ -45,20 +46,22 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.equal(response.status, 200);
   assert.equal(calls, 1);
   assert.match(response.body, /Official Credit/);
-  assert.match(response.body, /Model credit mix/);
-  assert.match(response.body, /Attribution quality/);
+  assert.match(response.body, /Model mix/);
+  assert.match(response.body, /Attribution quality:/);
   assert.match(response.body, /model-donut/);
   assert.match(response.body, /id="donut-model">gpt-5\.6-sol/);
   assert.match(response.body, /90\.0%/);
   assert.match(response.body, /data-model=/);
   assert.match(response.body, /pointerenter/);
-  assert.match(response.body, /Credit used/);
-  assert.match(response.body, /Time to reset/);
+  assert.match(response.body, /Credit consumed/);
+  assert.match(response.body, /Time remaining to reset/);
   assert.match(response.body, /transform:scaleX\(0\.03\)/);
+  assert.match(response.body, /Attribution period/);
+  assert.match(response.body, /2026-07-16 – 2026-07-30 UTC/);
   assert.match(response.body, /id="export-json"/);
   assert.match(response.body, /fetch\("\/api\/usage"/);
   assert.match(response.body, /codex-usage-/);
-  assert.match(response.body, /<button id="refresh" class="refresh" type="button">Refresh snapshot<\/button>/);
+  assert.match(response.body, /<button id="refresh" class="action primary" type="button">Refresh<\/button>/);
   assert.match(response.body, /addEventListener\("click",\(\)=>location\.reload\(\)\)/);
   assert.equal(response.headers["cache-control"], "no-store");
   assert.equal(response.headers["x-content-type-options"], "nosniff");
@@ -94,6 +97,7 @@ test("POST /api/refresh takes one fresh snapshot only when the body is empty", a
 
 test("known read failures are represented as a 200 availability state", async () => {
   const unavailableServer = createDashboardServer({ refresh: async () => ({
+    observationWindow: { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" },
     officialCredit: { status: "unavailable" },
     estimatedCreditAttribution: [],
     attributionQuality: { status: "unavailable", message: "Official credit is unavailable, so estimates are unavailable." }

@@ -9,6 +9,7 @@ test("the dashboard rejects a Host that is not its current loopback authority", 
   const server = createDashboardServer({ refresh: async () => {
     calls += 1;
     return {
+      observationWindow: { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" },
       officialCredit: { status: "unavailable" as const },
       estimatedCreditAttribution: [],
       attributionQuality: { status: "unavailable" as const, message: "Official credit is unavailable, so estimates are unavailable." }
