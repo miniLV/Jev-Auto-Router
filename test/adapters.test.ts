@@ -1,0 +1,60 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { hasValidUsage, normalizeRateLimits } from "../src/app-server.js";
+import { aggregateCcusage, buildCcusageArgs } from "../src/local.js";
+import { allocateCredits } from "../src/credit.js";
+
+test("rate limits prefer the codex limit and reject incomplete values", () => {
+  assert.deepEqual(normalizeRateLimits({
+    rateLimitsByLimitId: { codex: { individualLimit: { limit: "500.00", used: "12.50", remainingPercent: 97.5, resetsAt: 1785542400 } } },
+    rateLimits: { individualLimit: { limit: "1.00", used: "1.00", remainingPercent: 0, resetsAt: 1 } }
+  }), { limit: "500.00", used: "12.50", remaining: "487.50", remainingPercent: 97.5, resetsAt: "2026-08-01T00:00:00.000Z" });
+  assert.equal(normalizeRateLimits({ rateLimits: { limit: 500, used: 12.5, remainingPercent: 97.5, resetsAt: "2026-08-01T00:00:00Z" } }), undefined);
+});
+
+test("local aggregation retains only named model totals and generic skip counts", () => {
+  const result = aggregateCcusage({
+    sessions: [{
+      directory: "privacy-canary-directory",
+      sessionFile: "privacy-canary-session-file",
+      sessionId: "privacy-canary-session-id",
+      prompt: "privacy-canary-prompt",
+      models: {
+        "gpt-5.6-terra": { inputTokens: 10, cachedInputTokens: 3, outputTokens: 2, reasoningOutputTokens: 1, totalTokens: 16 },
+        mystery: { inputTokens: 99, totalTokens: 99 }
+      }
+    }]
+  });
+  assert.deepEqual(result, { models: [{ model: "gpt-5.6-terra", tokens: 16 }], skippedEntries: 1 });
+  assert.doesNotMatch(JSON.stringify(result), /privacy-canary|mystery/);
+});
+
+test("ccusage is invoked directly, offline, and with UTC date-only bounds", () => {
+  assert.deepEqual(buildCcusageArgs({ since: "2026-07-01", until: "2026-07-30", timezone: "UTC" }), [
+    "codex", "session", "--json", "--offline", "--since", "2026-07-01", "--until", "2026-07-30", "--timezone", "UTC"
+  ]);
+  assert.throws(() => buildCcusageArgs({ since: "2026-07-01T00:00:00.000Z", until: "2026-07-30", timezone: "UTC" }));
+});
+
+test("usage requires the exact summary and dailyUsageBuckets token shape", () => {
+  const summary = { lifetimeTokens: 1, peakDailyTokens: 1, longestRunningTurnSec: 1, currentStreakDays: 1, longestStreakDays: 1 };
+  assert.equal(hasValidUsage({ summary, dailyUsageBuckets: [{ startDate: "2026-07-30", tokens: 3 }] }), true);
+  assert.equal(hasValidUsage({ summary: { inputTokens: 1 }, dailyUsageBuckets: [{ startDate: "2026-07-30", tokens: 3 }] }), false);
+  assert.equal(hasValidUsage({ summary, dailyUsageBuckets: [{ inputTokens: 3 }] }), false);
+  assert.equal(hasValidUsage({ summary, daily: [{ startDate: "2026-07-30", tokens: 3 }] }), false);
+  assert.equal(hasValidUsage({ summary, buckets: [{ startDate: "2026-07-30", tokens: 3 }] }), false);
+});
+
+test("estimated rows use deterministic largest remainder and sum to official credit", () => {
+  const allocation = allocateCredits("1.00", [
+    { model: "gpt-5.6-sol", tokens: 1 },
+    { model: "gpt-5.6-terra", tokens: 1 },
+    { model: "gpt-5.6", tokens: 1 }
+  ]);
+  assert.deepEqual(allocation, [
+    { model: "gpt-5.6-sol", credits: "0.34" },
+    { model: "gpt-5.6-terra", credits: "0.33" },
+    { model: "gpt-5.6", credits: "0.33" }
+  ]);
+  assert.equal(allocation.reduce((total, row) => total + BigInt(row.credits.replace(".", "")), 0n), 100n);
+});

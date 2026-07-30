@@ -50,7 +50,7 @@ The example only proves that a cache-heavy task can occur. It does not prove tha
 
 Phase 0 is initial setup plus manual refresh. It is never executed for every conversation.
 
-It aggregates multiple completed local tasks over a declared observation window and publishes a versioned, content-free User Usage Profile. Runtime routing reads that published profile; it does not rescan old conversations.
+It aggregates multiple completed local tasks over a declared observation window and renders a current, content-free local usage view. Stage 0 does not publish or persist a User Usage Profile; a future routing stage would need a separately approved profile contract rather than rescanning old conversations.
 
 | Time | Action | On the task hot path? |
 | --- | --- | --- |
@@ -64,19 +64,17 @@ V1 uses two deliberately separate data classes:
 | --- | --- | --- |
 | Official Credit Snapshot | Codex App Server `account/rateLimits/read` | Current-cycle Credit limit, used Credits, remaining percentage, and reset time. This is the official aggregate total. |
 | Official Token Activity | Codex App Server `account/usage/read` | Account-level daily token activity and coverage reference. It does not contain a model or effort breakdown. |
-| Local Usage Attribution | `ccusage` parsing local Codex session JSONL plus a thin effort reader | Model, token class, session, service tier, and reasoning-effort patterns. Per-model Credit values are estimates, not billed amounts. |
+| Local Usage Attribution | `ccusage` offline session-summary parsing | Verified model and numeric token patterns only. Effort and service tier remain unavailable unless a separately verified, field-whitelisted envelope provides them. Per-model Credit values are estimates, not billed amounts. |
 
-The Dashboard's default observation window is the current official Credit cycle. It is local-only and manually refreshed; V1 has no background polling, daemon, or scheduler. A historical daily Credit curve is available only for dates on which a user has manually recorded a snapshot.
+The Dashboard prefers the current official Credit cycle when its complete bounds are available. The current App Server contract exposes a reset time but not a verified cycle start, so V1 uses an explicit source-owned trailing 30-day local-attribution window and labels it non-reconciled. It is local-only and manually refreshed; V1 has no background polling, daemon, or scheduler. A historical daily Credit curve is available only for dates on which a user has manually recorded a snapshot.
 
-The profile reports:
+The Stage 0 Dashboard presents:
 
-- Observation window and completed-task count.
-- Fresh input, cached input, output, and reasoning-output totals.
-- Median and high-percentile usage per task.
-- Model and reasoning-effort mix.
-- Child count, handoff size, validation result, and rework where observable.
-- Official Credit Snapshot metadata and rate-card version when known.
-- Model and effort attribution labelled as an estimate and separated visually from official Credits.
+- Official Credit Snapshot metadata: limit, used Credits, remaining percentage, and reset time.
+- Estimated Credit Attribution by model, calculated from the official used-Credit total and local model token shares whenever both sources are available. It is always labelled as an estimate, and Attribution Quality explains any coverage or timing difference.
+- Attribution Quality: the observation window, source availability, and reconciliation status.
+
+Fresh input, cached input, output, reasoning-output, and official daily token activity remain internal calculation or diagnostic data. They are not primary Stage 0 Dashboard metrics.
 
 It must not retain or upload prompts, code, logs, paths, tickets, URLs, identifiers, or free text.
 
@@ -486,7 +484,7 @@ Could add provider diversity, but adds authentication and transfer complexity. R
 
 - Separate `codex-auto-router` plugin; Codex App and CLI only in V1.
 - Thin decision layer on Codex Orchestration; no fork and no second scheduler.
-- Personal multi-task Usage Profile before routing.
+- Personal multi-task usage observation before routing, rendered only as the current local view in Stage 0.
 - Phase 0 is initial plus periodic/manual refresh, never per conversation.
 - Main Task and Root Agent are the same task.
 - Root Model is user-selected and is not switched in place.
