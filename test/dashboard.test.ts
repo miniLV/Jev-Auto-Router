@@ -54,9 +54,11 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.match(response.body, /data-model=/);
   assert.match(response.body, /pointerenter/);
   assert.match(response.body, /Credit used/);
-  assert.match(response.body, /Cycle elapsed/);
+  assert.match(response.body, /Time to reset/);
   assert.match(response.body, /97\.0% remaining/);
-  assert.match(response.body, /transform:scaleX\(0\.03\)/);
+  assert.match(response.body, /transform:scaleX\(0\.97\)/);
+  assert.match(response.body, /\.credit-progress span\{transform:scaleX\(0\.97\)\}/);
+  assert.doesNotMatch(response.body, /style="transform:/);
   assert.match(response.body, /Attribution period/);
   assert.match(response.body, /2026-07-16 – 2026-07-30 UTC/);
   assert.match(response.body, /id="export-json"/);
