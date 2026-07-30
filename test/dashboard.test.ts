@@ -53,8 +53,9 @@ test("GET / renders one fresh snapshot with the three primary blocks", async () 
   assert.match(response.body, /90\.0%/);
   assert.match(response.body, /data-model=/);
   assert.match(response.body, /pointerenter/);
-  assert.match(response.body, /Credit consumed/);
-  assert.match(response.body, /Time remaining to reset/);
+  assert.match(response.body, /Credit used/);
+  assert.match(response.body, /Cycle elapsed/);
+  assert.match(response.body, /97\.0% remaining/);
   assert.match(response.body, /transform:scaleX\(0\.03\)/);
   assert.match(response.body, /Attribution period/);
   assert.match(response.body, /2026-07-16 – 2026-07-30 UTC/);
