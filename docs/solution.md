@@ -66,13 +66,13 @@ V1 uses two deliberately separate data classes:
 | Official Token Activity | Codex App Server `account/usage/read` | Account-level daily token activity and coverage reference. It does not contain a model or effort breakdown. |
 | Local Usage Attribution | `ccusage` offline session-summary parsing | Verified model and numeric token patterns only. Effort and service tier remain unavailable unless a separately verified, field-whitelisted envelope provides them. Per-model Credit values are estimates, not billed amounts. |
 
-The Dashboard prefers the current official Credit cycle when its complete bounds are available. The current App Server contract exposes a reset time but not a verified cycle start, so V1 uses an explicit source-owned trailing 30-day local-attribution window and labels it non-reconciled. It is local-only and manually refreshed; V1 has no background polling, daemon, or scheduler. A historical daily Credit curve is available only for dates on which a user has manually recorded a snapshot.
+The Dashboard uses the locally confirmed monthly reporting boundary for local attribution: the bootstrap period starts on 2026-07-16 and ends on the current UTC date; each subsequent period starts on the first UTC day of the current month and ends on the current UTC date. Since `ccusage --until` is inclusive, those start and end dates are passed directly (for example, `--since 2026-07-16 --until 2026-07-30`). The App Server remains authoritative for aggregate Credit; per-model Credit remains an estimate allocated by local token share. It is local-only and manually refreshed; V1 has no background polling, daemon, or scheduler. A historical daily Credit curve is available only for dates on which a user has manually recorded a snapshot.
 
 The Stage 0 Dashboard presents:
 
 - Official Credit Snapshot metadata: limit, used Credits, remaining percentage, and reset time.
 - Estimated Credit Attribution by model, calculated from the official used-Credit total and local model token shares whenever both sources are available. It is always labelled as an estimate, and Attribution Quality explains any coverage or timing difference.
-- Attribution Quality: the observation window, source availability, and reconciliation status.
+- Attribution Quality: the observation window, source availability, and reconciliation status. The local dashboard uses a native interactive SVG model-share chart and a compact, sketchboard-style web view; it remains observational and cannot enable routing policy.
 
 Fresh input, cached input, output, reasoning-output, and official daily token activity remain internal calculation or diagnostic data. They are not primary Stage 0 Dashboard metrics.
 

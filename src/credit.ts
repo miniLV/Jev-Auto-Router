@@ -1,4 +1,4 @@
-import type { LocalUsage, OfficialSnapshot, UsageViewModel } from "./types.js";
+import type { LocalUsage, ObservationWindow, OfficialSnapshot, UsageViewModel } from "./types.js";
 
 function decimalParts(value: string): { whole: string; fraction: string } {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
@@ -52,9 +52,10 @@ export function allocateCredits(used: string, models: LocalUsage["models"]): Arr
   return rows.map((row) => ({ model: row.model, credits: formatScaled(row.base, places), share: row.tokens / totalTokens }));
 }
 
-export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | undefined): UsageViewModel {
+export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | undefined, observationWindow: ObservationWindow): UsageViewModel {
   if (!official.rateLimit) {
     return {
+      observationWindow,
       officialCredit: { status: "unavailable" },
       estimatedCreditAttribution: [],
       attributionQuality: { status: "unavailable", message: "Official credit is unavailable, so estimates are unavailable." }
@@ -71,12 +72,14 @@ export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | un
   };
   if (!local || local.models.length === 0) {
     return {
+      observationWindow,
       officialCredit,
       estimatedCreditAttribution: [],
       attributionQuality: { status: "unavailable", message: "Local model attribution is unavailable." }
     };
   }
   return {
+    observationWindow,
     officialCredit,
     estimatedCreditAttribution: allocateCredits(rate.used, local.models),
     attributionQuality: {

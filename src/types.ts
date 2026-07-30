@@ -3,6 +3,7 @@ export type OfficialCredit =
   | { status: "unavailable" };
 
 export interface UsageViewModel {
+  observationWindow: ObservationWindow;
   officialCredit: OfficialCredit;
   estimatedCreditAttribution: Array<{ model: string; credits: string; share: number }>;
   attributionQuality: { status: "estimated" | "unavailable"; message: string };

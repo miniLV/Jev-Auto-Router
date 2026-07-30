@@ -16,7 +16,7 @@ Treating a local token calculation as actual Credits would make the Dashboard mi
 3. V1 uses `ccusage --offline` for local Codex session token and model parsing. It reads only a verified session-summary envelope and field-whitelists model names and numeric token counts; reasoning effort and service tier remain unavailable unless a separately verified, field-whitelisted envelope provides them. It does not parse, retain, or expose session prompts, tool output, paths, code, or other free text; absent metadata remains `unknown`.
 4. Any model- or effort-level Credit number is a Usage Attribution Estimate. When Official Credits used and local model attribution are available, it allocates the official total in proportion to the local model token share. It must be labelled as an estimate and never presented as an official invoice or billing export; Attribution Quality explains any coverage or timing difference. It is unavailable only when either source is unavailable.
 5. Reconciliation compares local token attribution only with Official Token Activity for compatible observation windows. If they differ, App Server remains unchanged and authoritative; the Dashboard reports the local coverage or timing mismatch without comparing token units with Official Credits or deriving an official per-model Credit value.
-6. The Dashboard prefers the current official Credit cycle when its complete bounds are available. The current App Server response exposes a reset time but not a verified cycle start, so V1 uses an explicit source-owned trailing 30-day local-attribution window and marks the result non-reconciled.
+6. The Dashboard uses the locally confirmed monthly attribution boundary: the one-time bootstrap period starts on 2026-07-16 and ends on the current UTC date; subsequent periods start on the first UTC day of the current month and end on the current UTC date. Since `ccusage --until` is inclusive, those dates are passed directly. This supplies consistent local model attribution while App Server aggregate Credit remains authoritative.
 7. Refresh is manual. V1 has no daemon, scheduler, background polling, prompt capture, upload, or persisted Dashboard snapshot. The local web view holds only the current in-memory result of a read.
 8. If an Official Credit read is unavailable or invalid, the Dashboard states that the official value is unavailable. It may still render local token attribution as non-billing data, but it does not infer or display a Credit amount.
 9. The Dashboard is observational only. It does not create, modify, or enable Router rules.
@@ -35,6 +35,7 @@ Treating a local token calculation as actual Credits would make the Dashboard mi
 
 - V1 cannot reconstruct an official historical daily Credit curve before snapshots exist.
 - Per-model and per-effort Credits remain attribution estimates.
+- A session count and a model-record count are distinct measures: one session can contain more than one model record, so they are never summed or treated as a billing metric.
 - The App Server command is documented but marked experimental, so the integration needs a versioned adapter and a clear unavailable-data state.
 
 ## Alternatives Rejected
