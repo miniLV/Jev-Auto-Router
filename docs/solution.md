@@ -48,15 +48,25 @@ The example only proves that a cache-heavy task can occur. It does not prove tha
 
 ## 3. Phase 0: Personal Usage Profile First
 
-Phase 0 is initial setup plus periodic or manual refresh. It is never executed for every conversation.
+Phase 0 is initial setup plus manual refresh. It is never executed for every conversation.
 
 It aggregates multiple completed local tasks over a declared observation window and publishes a versioned, content-free User Usage Profile. Runtime routing reads that published profile; it does not rescan old conversations.
 
 | Time | Action | On the task hot path? |
 | --- | --- | --- |
 | Initial opt-in | Aggregate completed tasks and publish Profile v1 | No |
-| Weekly, task-count, or manual refresh | Recalculate cost shape, quality, and rework | No |
+| Manual refresh | Read a fresh official Credit snapshot and recalculate the local usage attribution | No |
 | Each new task or explicit escalation phase | Read the published profile and policy; produce one Route Decision | Yes, but no history rescan |
+
+V1 uses two deliberately separate data classes:
+
+| Data class | Source | What it proves |
+| --- | --- | --- |
+| Official Credit Snapshot | Codex App Server `account/rateLimits/read` | Current-cycle Credit limit, used Credits, remaining percentage, and reset time. This is the official aggregate total. |
+| Official Token Activity | Codex App Server `account/usage/read` | Account-level daily token activity and coverage reference. It does not contain a model or effort breakdown. |
+| Local Usage Attribution | `ccusage` parsing local Codex session JSONL plus a thin effort reader | Model, token class, session, service tier, and reasoning-effort patterns. Per-model Credit values are estimates, not billed amounts. |
+
+The Dashboard's default observation window is the current official Credit cycle. It is local-only and manually refreshed; V1 has no background polling, daemon, or scheduler. A historical daily Credit curve is available only for dates on which a user has manually recorded a snapshot.
 
 The profile reports:
 
@@ -65,11 +75,12 @@ The profile reports:
 - Median and high-percentile usage per task.
 - Model and reasoning-effort mix.
 - Child count, handoff size, validation result, and rework where observable.
-- Billing source and rate-card version when known.
+- Official Credit Snapshot metadata and rate-card version when known.
+- Model and effort attribution labelled as an estimate and separated visually from official Credits.
 
 It must not retain or upload prompts, code, logs, paths, tickets, URLs, identifiers, or free text.
 
-Without a representative Profile, the Router remains analysis-only or shadow-only. It must not auto-enable a policy based on one task.
+Without a representative Profile, the Router remains analysis-only or shadow-only. Dashboard V1 itself never changes or enables routing policy; it only supplies evidence for a later Router decision. It must not auto-enable a policy based on one task.
 
 ## 4. Shared Vocabulary
 
