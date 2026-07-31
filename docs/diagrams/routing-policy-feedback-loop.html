@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Auto Router 风险规则与数据闭环</title>
+  <style>
+    :root { --paper:#f8f5ec; --ink:#1f2328; --muted:#6f6a62; --grid:rgba(31,35,40,.055); --orange:#d76838; --orange-soft:#ffe0c6; --yellow:#d3a83d; --yellow-soft:#fff0ad; --teal:#20898d; --teal-soft:#d2f0ef; --blue:#3867d6; --blue-soft:#dbe7ff; --green:#3f8f52; --green-soft:#d8f0cf; --pink:#c85b82; --pink-soft:#ffe0eb; }
+    * { box-sizing:border-box; } body { margin:0; background:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px),var(--paper); background-size:34px 34px; color:var(--ink); font-family:"Chalkboard SE","Marker Felt","PingFang SC",sans-serif; }
+    .page { width:1600px; height:1000px; margin:0 auto; padding:42px 58px; position:relative; overflow:hidden; } .kicker { color:var(--orange); font:900 15px/1.1 "Avenir Next","PingFang SC",sans-serif; letter-spacing:.12em; } h1 { margin:10px 0 0; font-size:52px; line-height:1; } .subtitle { margin:14px 0 0; color:var(--muted); font:650 20px/1.45 "Avenir Next","PingFang SC",sans-serif; }
+    .stamp { position:absolute; right:62px; top:47px; width:330px; padding:14px 17px; border:3px solid var(--teal); border-radius:22px 17px 25px 18px; background:var(--teal-soft); box-shadow:7px 8px 0 rgba(31,35,40,.11); transform:rotate(1.5deg); } .stamp b { display:block; font-size:21px; } .stamp span { display:block; margin-top:5px; color:#3d5755; font:700 14px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .board { position:relative; height:710px; margin-top:34px; display:grid; grid-template-columns:620px 1fr; gap:35px; } .panel { position:relative; border:3px solid var(--ink); border-radius:31px 25px 34px 28px; background:rgba(255,255,255,.38); box-shadow:10px 11px 0 rgba(31,35,40,.1); padding:25px; overflow:hidden; } .tag { display:inline-block; padding:5px 11px; border:2px solid var(--ink); border-radius:11px 16px 12px 15px; background:var(--paper); font:900 16px/1 "Avenir Next","PingFang SC",sans-serif; }
+    .rule { position:absolute; left:48px; right:48px; min-height:116px; padding:16px 18px; border:3px solid var(--stroke); border-radius:20px 16px 22px 18px; background:var(--fill); box-shadow:7px 8px 0 rgba(31,35,40,.11); z-index:3; } .rule b { display:block; font-size:26px; line-height:1.05; } .rule p { margin:8px 0 0; color:#46423b; font:650 14px/1.35 "Avenir Next","PingFang SC",sans-serif; } .r1 { top:84px; } .r2 { top:264px; } .r3 { top:444px; }
+    .orange { --stroke:var(--orange); --fill:var(--orange-soft); } .yellow { --stroke:var(--yellow); --fill:var(--yellow-soft); } .teal { --stroke:var(--teal); --fill:var(--teal-soft); } .blue { --stroke:var(--blue); --fill:var(--blue-soft); } .green { --stroke:var(--green); --fill:var(--green-soft); } .pink { --stroke:var(--pink); --fill:var(--pink-soft); }
+    .arrow { position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; } .arrow path { fill:none; stroke:var(--ink); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; marker-end:url(#arr); } .arrow .dashed { stroke-dasharray:8 8; stroke:#7b756c; }
+    .loop-title { margin:19px 0 0; font-size:31px; line-height:1; } .event { position:absolute; width:240px; min-height:126px; padding:16px 17px; border:3px solid var(--stroke); border-radius:20px 16px 22px 18px; background:var(--fill); box-shadow:7px 8px 0 rgba(31,35,40,.11); z-index:3; } .event h2 { margin:0; font-size:23px; line-height:1.04; } .event p { margin:8px 0 0; color:#46423b; font:650 13px/1.35 "Avenir Next","PingFang SC",sans-serif; } .e1 { left:34px; top:104px; } .e2 { right:34px; top:104px; } .e3 { right:34px; top:334px; } .e4 { left:34px; top:334px; }
+    .center { position:absolute; left:50%; top:51%; width:218px; height:218px; transform:translate(-50%,-50%) rotate(-1deg); border:4px solid var(--ink); border-radius:50%; background:rgba(255,252,243,.92); box-shadow:9px 10px 0 rgba(31,35,40,.11); display:grid; place-items:center; text-align:center; padding:25px; z-index:4; } .center b { display:block; font-size:28px; line-height:1.03; } .center span { display:block; margin-top:8px; color:var(--muted); font:700 13px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .bottom { position:absolute; left:24px; right:24px; bottom:25px; padding:13px 15px; border:2.5px dashed var(--teal); border-radius:18px 14px 20px 16px; background:var(--teal-soft); font:750 14px/1.38 "Avenir Next","PingFang SC",sans-serif; } .bottom b { font-size:17px; }
+    .caption { position:absolute; right:80px; bottom:13px; color:var(--muted); font:700 13px/1 "Avenir Next","PingFang SC",sans-serif; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX AUTO ROUTER · V1 POLICY &amp; EVIDENCE</div>
+    <h1>风险规则与数据闭环</h1>
+    <p class="subtitle">模型占比只提示“值得调查”；验证、返工和升级结果才决定后续策略是否值得调整。</p>
+    <div class="stamp"><b>V1：固定策略 + Shadow 记录</b><span>周期内不自学习；个人校准是 V2，且不能削弱 HIGH 风险底线。</span></div>
+    <section class="board">
+      <article class="panel"><span class="tag">① ROUTE LEVEL · 不做数值打分</span>
+        <svg class="arrow" viewBox="0 0 620 710" aria-hidden="true"><defs><marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#1f2328"/></marker></defs><path d="M310 207 V256"/><path d="M310 387 V436"/></svg>
+        <div class="rule orange r1"><b>命中 HIGH Risk Floor → HIGH</b><p>安全 / 隐私 / 数据、迁移、协议、架构、跨平台、系统级、难回滚，或高歧义且验证不足。</p></div>
+        <div class="rule yellow r2"><b>所有 LOW 条件满足 → LOW</b><p>范围局部、歧义低、风险低、易回滚、确定性验证，并且没有 HIGH 原因。</p></div>
+        <div class="rule teal r3"><b>其他全部 → MEDIUM</b><p>安全默认值。预算压力不能把 HIGH 降级；只影响对可选高成本路径的提示强度。</p></div>
+      </article>
+      <article class="panel"><span class="tag">② LOCAL EVIDENCE LOOP · 无正文</span><h2 class="loop-title">从建议到下一周期的人工决策</h2>
+        <svg class="arrow" viewBox="0 0 829 710" aria-hidden="true"><defs><marker id="arr2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#1f2328"/></marker></defs><path d="M274 167 H546" marker-end="url(#arr2)"/><path d="M660 238 V326" marker-end="url(#arr2)"/><path d="M546 397 H274" marker-end="url(#arr2)"/><path d="M160 326 V238" marker-end="url(#arr2)"/><path class="dashed" d="M418 472 V554" marker-end="url(#arr2)"/></svg>
+        <div class="event blue e1"><h2>Shadow Route Record</h2><p>推荐 route / model / effort、reason codes、policy version、runway。</p></div>
+        <div class="event green e2"><h2>实际选择</h2><p>可观察时记录 actual model / effort；用户 override 保留。</p></div>
+        <div class="event pink e3"><h2>Route Outcome</h2><p>validation、rework、escalation、completion；unknown 不猜测。</p></div>
+        <div class="event orange e4"><h2>追加式修正</h2><p>后续事实另写 event，不覆盖历史；不保存 Jira、prompt、代码或日志。</p></div>
+        <div class="center"><div><b>按可比 cohort<br>人工复盘</b><span>同类 phase × model × effort<br>不能重复跑同一个 live ticket</span></div></div>
+        <div class="bottom"><b>周期边界：</b>一个 Credit cycle 内 policy version 固定。只有在周期之间、证据证明首轮验证不降且 rework-adjusted Credit 更优时，才发布下一个 Team Policy。V2 才可做有限的个人校准。</div>
+      </article>
+    </section>
+    <div class="caption">目标：预测 Credit Runway 支撑到 reset，最终余量约 0–2%，而不是固定保留 15%。</div>
+  </main>
+</body>
+</html>

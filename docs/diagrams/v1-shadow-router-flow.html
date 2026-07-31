@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Auto Router V1 阶段化 Shadow Router</title>
+  <style>
+    :root { --paper:#f8f5ec; --ink:#1f2328; --muted:#6f6a62; --grid:rgba(31,35,40,.055); --orange:#d76838; --orange-soft:#ffe0c6; --yellow:#d3a83d; --yellow-soft:#fff0ad; --teal:#20898d; --teal-soft:#d2f0ef; --blue:#3867d6; --blue-soft:#dbe7ff; --green:#3f8f52; --green-soft:#d8f0cf; --pink:#c85b82; --pink-soft:#ffe0eb; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px),var(--paper); background-size:34px 34px; color:var(--ink); font-family:"Chalkboard SE","Marker Felt","PingFang SC",sans-serif; }
+    .page { width:1600px; height:1000px; margin:0 auto; padding:42px 58px; position:relative; overflow:hidden; }
+    .kicker { color:var(--orange); font:900 15px/1.1 "Avenir Next","PingFang SC",sans-serif; letter-spacing:.12em; }
+    h1 { margin:10px 0 0; font-size:52px; line-height:1; }
+    .subtitle { margin:14px 0 0; color:var(--muted); font:650 20px/1.45 "Avenir Next","PingFang SC",sans-serif; }
+    .stamp { position:absolute; right:62px; top:47px; width:310px; padding:14px 17px; border:3px solid var(--orange); border-radius:22px 17px 25px 18px; background:var(--orange-soft); box-shadow:7px 8px 0 rgba(31,35,40,.11); transform:rotate(1.5deg); }
+    .stamp b { display:block; font-size:21px; } .stamp span { display:block; margin-top:5px; color:#5c443a; font:700 14px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .board { position:relative; height:710px; margin-top:34px; border:2px dashed rgba(31,35,40,.27); border-radius:32px; background:rgba(255,255,255,.28); }
+    .lane { position:absolute; left:24px; top:-17px; z-index:5; padding:5px 13px; border:2px solid var(--ink); border-radius:12px 16px 11px 15px; background:var(--paper); font-size:18px; font-weight:900; }
+    .node { position:absolute; width:235px; min-height:118px; padding:17px 18px; border:3px solid var(--stroke); border-radius:20px 16px 22px 18px; background:var(--fill); box-shadow:8px 9px 0 rgba(31,35,40,.11); transform:rotate(var(--tilt)); z-index:3; }
+    .node h2 { margin:0; font-size:25px; line-height:1.05; } .node p { margin:8px 0 0; color:#45413a; font:650 14px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .orange { --stroke:var(--orange); --fill:var(--orange-soft); } .yellow { --stroke:var(--yellow); --fill:var(--yellow-soft); } .teal { --stroke:var(--teal); --fill:var(--teal-soft); } .blue { --stroke:var(--blue); --fill:var(--blue-soft); } .green { --stroke:var(--green); --fill:var(--green-soft); } .pink { --stroke:var(--pink); --fill:var(--pink-soft); }
+    .n1 { left:55px; top:76px; --tilt:-1.1deg; } .n2 { left:334px; top:76px; --tilt:.8deg; } .n3 { left:614px; top:76px; --tilt:-.6deg; } .n4 { left:895px; top:76px; --tilt:1.1deg; } .n5 { left:1176px; top:76px; --tilt:-.8deg; }
+    .n6 { left:300px; top:328px; width:282px; --tilt:.8deg; } .n7 { left:680px; top:328px; width:282px; --tilt:-.8deg; } .n8 { left:1057px; top:328px; width:282px; --tilt:.6deg; }
+    .phases { position:absolute; left:613px; top:222px; width:240px; display:flex; flex-wrap:wrap; gap:6px; z-index:4; } .phase { padding:5px 8px; border:1.8px solid rgba(31,35,40,.46); border-radius:10px; background:rgba(255,255,255,.68); font:800 12px/1 "Avenir Next","PingFang SC",sans-serif; }
+    .note { position:absolute; left:55px; right:55px; bottom:44px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; z-index:4; } .note div { min-height:94px; padding:14px 17px; border:2.5px dashed var(--stroke); border-radius:19px 15px 21px 17px; background:var(--fill); } .note b { display:block; font-size:19px; } .note span { display:block; margin-top:6px; color:#4b4740; font:650 13px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .arrow { position:absolute; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; } .arrow path { fill:none; stroke:var(--ink); stroke-width:3; stroke-linecap:round; stroke-linejoin:round; marker-end:url(#arr); } .arrow .dashed { stroke-dasharray:8 8; stroke:#7b756c; }
+    .caption { position:absolute; right:80px; bottom:13px; color:var(--muted); font:700 13px/1 "Avenir Next","PingFang SC",sans-serif; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX AUTO ROUTER · CONFIRMED V1 DESIGN</div>
+    <h1>V1 阶段化 Shadow Router</h1>
+    <p class="subtitle">已确认的建议路径：Router 只给可解释的 Hint；Root 仍是唯一执行与委派负责人。</p>
+    <div class="stamp"><b>待实现，非已上线功能</b><span>Phase 0 Dashboard 已实现；Jira / runtime 接入仍需 capability proof。</span></div>
+    <section class="board">
+      <div class="lane">CURRENT JIRA TASK · 当前任务，而非整个 release</div>
+      <svg class="arrow" viewBox="0 0 1484 710" aria-hidden="true"><defs><marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#1f2328"/></marker></defs>
+        <path d="M290 135 H326"/><path d="M570 135 H606"/><path d="M850 135 H887"/><path d="M1130 135 H1168"/>
+        <path d="M1294 198 V292 H1198 V320"/><path d="M1057 388 H971"/><path d="M677 388 H590"/>
+        <path class="dashed" d="M442 454 V545 H156 V500"/>
+      </svg>
+      <article class="node orange n1"><h2>① 当前 Jira 任务</h2><p>只处理正在进行的 ticket；不扫描整个 release。</p></article>
+      <article class="node yellow n2"><h2>② Root / 只读 Adapter</h2><p>读取与权限边界尚待证明；不保留 Jira 原文。</p></article>
+      <article class="node teal n3"><h2>③ Task Phase</h2><p>同一个 ticket 可在不同阶段得到不同建议。</p></article>
+      <div class="phases"><span class="phase">intake</span><span class="phase">diagnosis</span><span class="phase">planning</span><span class="phase">implementation</span><span class="phase">validation</span></div>
+      <article class="node blue n4"><h2>④ Task Signal Set</h2><p>范围、歧义、风险、可逆性、验证强度；全部为结构化枚举。</p></article>
+      <article class="node green n5"><h2>⑤ 确定性 Router</h2><p>Team Policy + Credit Runway + 用户显式 override。</p></article>
+      <article class="node pink n6"><h2>⑧ 本地 CLI Shadow Report</h2><p>显示建议、置信原因和预算压力；不执行切换。</p></article>
+      <article class="node teal n7"><h2>⑦ 推荐 Model + Effort</h2><p>Terra high 默认；HIGH 才使用 Sol xhigh 关键推理。</p></article>
+      <article class="node orange n8"><h2>⑥ Route Decision</h2><p>LOW / MEDIUM / HIGH + reason codes + policy version。</p></article>
+      <div class="note">
+        <div class="blue"><b>不做第二个 scheduler</b><span>Router 不创建 Sub-agent；Root 按 Codex Orchestration 判断是否委派。</span></div>
+        <div class="yellow"><b>不额外调用分类模型</b><span>Root 正常理解任务时产生 Signals；Router 只执行规则。</span></div>
+        <div class="green"><b>不自动改用户选择</b><span>显式模型、effort 与 no-subagents 指令永远优先。</span></div>
+      </div>
+    </section>
+    <div class="caption">V1 目标：在不降低首轮验证质量前提下，把 Credit 用到 reset 前。</div>
+  </main>
+</body>
+</html>

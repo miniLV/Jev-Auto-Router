@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Auto Router 完整职责与决策图</title>
+  <style>
+    :root { --paper:#f8f5ec; --ink:#1f2328; --muted:#6f6a62; --grid:rgba(31,35,40,.055); --orange:#d76838; --orange-soft:#ffe0c6; --yellow:#d3a83d; --yellow-soft:#fff0ad; --teal:#20898d; --teal-soft:#d2f0ef; --blue:#3867d6; --blue-soft:#dbe7ff; --green:#3f8f52; --green-soft:#d8f0cf; --pink:#c85b82; --pink-soft:#ffe0eb; }
+    * { box-sizing:border-box; } body { margin:0; background:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px),var(--paper); background-size:34px 34px; color:var(--ink); font-family:"Chalkboard SE","Marker Felt","PingFang SC",sans-serif; }
+    .page { width:1600px; height:1200px; margin:0 auto; padding:40px 58px; position:relative; overflow:hidden; } .kicker { color:var(--orange); font:900 15px/1.1 "Avenir Next","PingFang SC",sans-serif; letter-spacing:.12em; } h1 { margin:10px 0 0; font-size:50px; line-height:1; } .subtitle { margin:13px 0 0; color:var(--muted); font:650 19px/1.45 "Avenir Next","PingFang SC",sans-serif; }
+    .stamp { position:absolute; right:62px; top:44px; width:335px; padding:13px 17px; border:3px solid var(--orange); border-radius:22px 17px 25px 18px; background:var(--orange-soft); box-shadow:7px 8px 0 rgba(31,35,40,.11); transform:rotate(1.5deg); } .stamp b { display:block; font-size:20px; } .stamp span { display:block; margin-top:5px; color:#5c443a; font:700 13px/1.35 "Avenir Next","PingFang SC",sans-serif; }
+    .board { position:relative; height:920px; margin-top:29px; } .lane { position:absolute; left:0; right:0; border:2px dashed rgba(31,35,40,.28); border-radius:30px; background:rgba(255,255,255,.3); } .l1{top:0;height:212px}.l2{top:240px;height:425px}.l3{bottom:0;height:224px} .lane-label { position:absolute; left:23px; top:-17px; z-index:8; padding:5px 12px; border:2px solid var(--ink); border-radius:12px 16px 11px 15px; background:var(--paper); font-size:17px; font-weight:900; }
+    .node { position:absolute; padding:15px 17px; border:3px solid var(--stroke); border-radius:20px 16px 22px 18px; background:var(--fill); box-shadow:8px 9px 0 rgba(31,35,40,.11); transform:rotate(var(--tilt)); z-index:4; } .node h2 { margin:0; font-size:23px; line-height:1.05; } .node p { margin:8px 0 0; color:#47433d; font:650 13px/1.34 "Avenir Next","PingFang SC",sans-serif; } .orange{--stroke:var(--orange);--fill:var(--orange-soft)}.yellow{--stroke:var(--yellow);--fill:var(--yellow-soft)}.teal{--stroke:var(--teal);--fill:var(--teal-soft)}.blue{--stroke:var(--blue);--fill:var(--blue-soft)}.green{--stroke:var(--green);--fill:var(--green-soft)}.pink{--stroke:var(--pink);--fill:var(--pink-soft)}
+    .j1{left:62px;top:62px;width:260px;--tilt:-1deg}.j2{left:385px;top:62px;width:300px;--tilt:.8deg}.j3{left:750px;top:62px;width:300px;--tilt:-.7deg}.j4{left:1112px;top:62px;width:300px;--tilt:.8deg}
+    .r1{left:62px;top:302px;width:265px;--tilt:-.8deg}.r2{left:392px;top:302px;width:270px;--tilt:.7deg}.r3{left:727px;top:284px;width:300px;min-height:170px;--tilt:-.6deg}.r4{left:1092px;top:302px;width:300px;--tilt:.8deg}.m1{left:72px;top:522px;width:405px;--tilt:.5deg}.m2{left:548px;top:522px;width:405px;--tilt:-.5deg}.m3{left:1023px;top:522px;width:370px;--tilt:.7deg}
+    .e1{left:70px;bottom:39px;width:290px;--tilt:-.8deg}.e2{left:436px;bottom:39px;width:315px;--tilt:.7deg}.e3{left:826px;bottom:39px;width:315px;--tilt:-.6deg}.e4{right:66px;bottom:39px;width:270px;--tilt:.7deg}
+    .phase { display:inline-block; margin:10px 4px 0 0; padding:4px 7px; border:1.7px solid rgba(31,35,40,.44); border-radius:9px; background:rgba(255,255,255,.7); font:800 11px/1 "Avenir Next","PingFang SC",sans-serif; } .rule { margin-top:9px; padding-top:8px; border-top:1.5px dashed rgba(31,35,40,.35); color:#45413a; font:750 12px/1.34 "Avenir Next","PingFang SC",sans-serif; }
+    .arrow{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none}.arrow path{fill:none;stroke:var(--ink);stroke-width:3;stroke-linecap:round;stroke-linejoin:round;marker-end:url(#arr)}.arrow .dash{stroke:#777066;stroke-dasharray:8 8}.arrow text{font:800 13px "Avenir Next","PingFang SC",sans-serif;fill:#655f56}
+    .caption{position:absolute;right:80px;bottom:13px;color:var(--muted);font:700 13px/1 "Avenir Next","PingFang SC",sans-serif}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX AUTO ROUTER · COMPLETE V1 OVERVIEW</div>
+    <h1>Router、Jira 与 Team Policy 的完整职责图</h1>
+    <p class="subtitle">当前 Jira task 的信息只在 Root 理解任务时使用；Router 接收无正文信号并输出 Shadow 建议，不拥有委派权。</p>
+    <div class="stamp"><b>已确认设计，待实现 / 验证</b><span>Phase 0 Dashboard 已实现；Jira adapter 与 runtime 接入仍是 capability-proof 前置条件。</span></div>
+    <section class="board">
+      <div class="lane l1"><span class="lane-label">① JIRA / ROOT 边界 · 原文不进入 Router 或记录</span></div>
+      <div class="lane l2"><span class="lane-label">② 确定性决策 · 固定 Team Policy + Credit Runway</span></div>
+      <div class="lane l3"><span class="lane-label">③ LOCAL SHADOW EVIDENCE · 只记录结构化枚举与数字</span></div>
+      <svg class="arrow" viewBox="0 0 1484 920" aria-hidden="true"><defs><marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#1f2328"/></marker></defs>
+        <path d="M330 125 H376"/><path d="M694 125 H741"/><path d="M1059 125 H1103"/>
+        <path d="M1262 206 V274 H1180 V294"/><path d="M1083 360 H1035"/><path d="M720 360 H671"/><path d="M385 360 H336"/>
+        <path d="M195 437 V504 H274 V515"/><path d="M527 437 V503 H752 V515"/><path d="M877 459 V503 H1207 V515"/>
+        <path d="M274 642 V725 H215 V730"/><path d="M548 642 V706 H594 V730"/><path d="M1208 642 V706 H983 V730"/><path d="M1140 794 H1148"/>
+        <path class="dash" d="M215 870 V895 H1362 V870"/>
+        <text x="1045" y="270">用户 override</text><text x="81" y="700">推荐</text><text x="1030" y="700">完成后</text><text x="635" y="908">周期之间人工复盘 → 下一版 policy</text>
+      </svg>
+      <article class="node orange j1"><h2>当前 Jira task</h2><p>只处理当前任务，不扫描整个 release。ticket 原文只用于 Root 理解任务。</p></article>
+      <article class="node yellow j2"><h2>Root / 只读 Jira adapter</h2><p>未来接入需证明权限、dry-run 与无正文输出；它不是 Router 的存储层。</p></article>
+      <article class="node teal j3"><h2>Task Phase</h2><p>同一 ticket 可按阶段重新判断，而非整单固定模型。</p><span class="phase">intake</span><span class="phase">diagnosis</span><span class="phase">planning</span><span class="phase">implementation</span><span class="phase">validation</span></article>
+      <article class="node blue j4"><h2>Task Signal Set</h2><p>Root 仅输出结构化字段：scope、ambiguity、risk、reversibility、validation、phase。</p></article>
+      <article class="node green r4"><h2>确定性 Router</h2><p>输入相同，输出必须相同。读取 Team Policy、Credit Runway 与显式用户选择。</p></article>
+      <article class="node pink r3"><h2>Route Decision</h2><p>LOW / MEDIUM / HIGH + reason codes + policy version。</p><div class="rule">Route Level ≠ model ≠ reasoning effort</div></article>
+      <article class="node blue r2"><h2>Model + effort 建议</h2><p>Terra <b>high</b> 默认；Sol <b>xhigh</b> 只用于 HIGH 的关键规划/复杂诊断。</p></article>
+      <article class="node teal r1"><h2>本地 CLI Shadow Report</h2><p>展示推荐、原因和 runway；不自动切模型、不自动创建 Sub-agent。</p></article>
+      <article class="node orange m1"><h2>HIGH Risk Floor → HIGH</h2><p>任一命中：安全 / 隐私 / 数据、迁移、协议、架构、跨平台、系统级、难回滚，或高歧义且验证不足。</p></article>
+      <article class="node yellow m2"><h2>全部 LOW 条件满足 → LOW</h2><p>局部范围、低歧义、低风险、易回滚、确定性验证，并且没有任何 HIGH 原因。</p></article>
+      <article class="node teal m3"><h2>其余全部 → MEDIUM</h2><p>安全默认。预算压力不能降低 HIGH；只影响可选高成本路径的建议强度。</p></article>
+      <article class="node blue e1"><h2>Shadow Route Record</h2><p>推荐与实际 model/effort、signals、reason codes、policy version、runway。</p></article>
+      <article class="node pink e2"><h2>Route Outcome</h2><p>validation、rework、escalation、completion；未知保持 unknown。</p></article>
+      <article class="node green e3"><h2>追加式修正</h2><p>后续事实追加 event，不覆盖历史；不保存 Jira、prompt、代码、日志或路径。</p></article>
+      <article class="node orange e4"><h2>Team Policy v2</h2><p>仅在 cycle 之间，按可比 cohort 人工复盘后发布；V2 个人校准不能弱化 HIGH。</p></article>
+    </section>
+    <div class="caption">Credit Runway 目标：额度支撑到 reset，最终余量约 0–2%；不是固定预留 15%。</div>
+  </main>
+</body>
+</html>
