@@ -1,12 +1,16 @@
 ---
 name: codex-auto-router
-description: Explicitly route one substantial, bounded work unit from the current Root Agent to a lower-cost Terra child while Root retains intent, integration, verification, and final delivery. Use only when the user invokes $codex-auto-router; preserve any upstream Skill workflow and keep tiny, strongly coupled, destructive, or unverifiable work with Root.
+description: Use only when the user message literally includes $codex-auto-router. It routes one substantial, bounded work unit to a Terra child while Root retains intent, integration, verification, and final delivery; never activate it from task characteristics alone.
 ---
 
 # Codex Auto Router
 
+Use this Skill only when the user explicitly invokes `$codex-auto-router`.
+Do not infer invocation from task characteristics, model cost, or another Skill.
+
 Read [references/routing-policy.md](references/routing-policy.md) completely
-before making a Route Decision. It is the only routing authority.
+before making a Route Decision. It is the only routing authority. Do not read
+any other reference to decide `ROOT_DIRECT`.
 
 ## Execute
 
@@ -24,6 +28,7 @@ before making a Route Decision. It is the only routing authority.
    - verify the returned work before adopting it.
 5. Return one self-contained final answer from Root.
 
-Do not read the Dashboard, local usage history, research notes, Wiki, or ADRs
-to make a Route Decision. Do not invoke another routing or orchestration Skill.
-Do not create an App Background Thread as a substitute for the native child.
+No other documentation, usage source, or Skill config participates in a Route
+Decision. Do not invoke another routing or orchestration Skill for the same
+task. Do not create an App Background Thread as a substitute for the native
+child.

@@ -11,9 +11,9 @@ documentation, and tests. It does not define routing rules.
 | Auto Router | The explicitly invoked Skill that chooses whether bounded work stays with Root or is delegated under the Router Policy. |
 | Router Policy | The single normative source for route eligibility, Worker model and reasoning effort, and fallback behavior. |
 | Route Request | The current user request together with any upstream Skill workflow that Auto Router must preserve. |
-| Route Decision | The Router Policy result for a Route Request: Root Direct or Terra Background. |
-| Root Direct | A Route Decision that keeps the work in the Main Task. |
-| Terra Background | A Route Decision that delegates one bounded work unit to a Terra Worker and returns control to Root. |
+| Route Decision | The Router Policy result for a Route Request: `ROOT_DIRECT` or `TERRA_HIGH_BACKGROUND`. |
+| `ROOT_DIRECT` | A Route Decision that keeps the work in the Main Task. |
+| `TERRA_HIGH_BACKGROUND` | A Route Decision that delegates one bounded work unit to a Terra Worker and returns control to Root. |
 | Terra Worker | A fresh-context child Agent that performs exactly one bounded work unit and cannot delegate further. |
 | Task Packet | A self-contained handoff that gives a Terra Worker its objective, scope, constraints, acceptance criteria, verification, and return contract. |
 | Delegation Break-even | The point at which expected delegated work is large and independent enough to justify child startup, handoff, and Root verification. |
@@ -21,4 +21,8 @@ documentation, and tests. It does not define routing rules.
 | Personal Usage Dashboard | A loopback-only, manually refreshed view of the current official Credit cycle and locally estimated model attribution. It never participates in a Route Decision. |
 | Official Credit Snapshot | The current-cycle Credit limit, used amount, remaining amount, and reset time returned by Codex App Server. |
 | Usage Attribution Estimate | A non-authoritative model allocation produced from local model-token shares and the official aggregate Credit used. |
+| Attribution Quality | The Dashboard explanation of source availability, observation-window alignment, and estimate limitations. |
+| App Server Adapter | The short-lived, read-only Dashboard integration that reads the Official Credit Snapshot from Codex App Server. |
+| Reconciliation Status | The Dashboard explanation of whether local token attribution and official token activity have compatible coverage. It never changes official Credit. |
+| Manual Refresh | A user-initiated Dashboard action that obtains a fresh in-memory snapshot. It has no polling or Router side effect. |
 | Profile Export | A user-initiated, content-free JSON export from the Personal Usage Dashboard. |

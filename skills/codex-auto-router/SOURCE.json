@@ -1,10 +1,26 @@
 {
-  "upstream": "https://github.com/zjp1997720/zhijian-skills/tree/main/skills/codex-model-routing-team",
-  "commit": "eff93b823980a3cdadd1e362e54dc364553cc718",
-  "license": "MIT",
-  "relationship": "controlled-reduced-fork",
-  "derived_concepts": [
-    "self-contained worker task packet",
-    "native subagent lifecycle"
-  ]
+  "upstream": {
+    "repository": "https://github.com/zjp1997720/zhijian-skills",
+    "commit": "eff93b823980a3cdadd1e362e54dc364553cc718",
+    "license": "MIT",
+    "license_notice": "UPSTREAM-MIT-LICENSE"
+  },
+  "adapted_files": [
+    {
+      "local": "references/task-packet.md",
+      "upstream": "skills/codex-model-routing-team/references/task-packet.md"
+    },
+    {
+      "local": "references/native-subagent-lifecycle.md",
+      "upstream": "skills/codex-model-routing-team/references/native-subagent-lifecycle.md"
+    }
+  ],
+  "local_original_files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "references/routing-policy.md",
+    "SOURCE.json",
+    "NOTICE.md"
+  ],
+  "local_license": "No license asserted for local-original files."
 }
