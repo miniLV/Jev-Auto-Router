@@ -1,0 +1,7 @@
+interface:
+  display_name: "Codex Auto Router"
+  short_description: "Route bounded work to a Terra subagent"
+  default_prompt: "Use $codex-auto-router to decide whether this task should stay with Root or run through a Terra worker."
+
+policy:
+  allow_implicit_invocation: false
