@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import type { OfficialRateLimit, OfficialSnapshot } from "./types.js";
+import type { OfficialRateLimit, OfficialSnapshot, ReadinessDiagnostic } from "./types.js";
 import { subtractCredits } from "./credit.js";
 
 const MAX_OUTPUT_BYTES = 256 * 1024;
@@ -68,13 +68,17 @@ function stopChild(child: ChildProcessWithoutNullStreams): void {
   fallback.unref();
 }
 
+function unavailable(code: ReadinessDiagnostic["code"], message: string, remediation: string): OfficialSnapshot {
+  return { usageAvailable: false, diagnostic: { source: "official", code, message, remediation } };
+}
+
 export async function readOfficialSnapshot(): Promise<OfficialSnapshot> {
   return new Promise((resolve) => {
     let child: ChildProcessWithoutNullStreams;
     try {
       child = spawn("codex", ["app-server", "--listen", "stdio://"], { shell: false, stdio: "pipe" });
     } catch {
-      resolve({ usageAvailable: false });
+      resolve(unavailable("codex-missing", "Official Credit could not start because Codex was not found.", "Install or repair the Codex CLI, then run npm run setup."));
       return;
     }
     let buffer = "";
@@ -85,27 +89,27 @@ export async function readOfficialSnapshot(): Promise<OfficialSnapshot> {
     let rateRead = false;
     let usageRead = false;
     let completed = false;
-    const finish = (): void => {
+    const finish = (diagnostic?: ReadinessDiagnostic): void => {
       if (completed) return;
       completed = true;
       clearTimeout(timer);
       stopChild(child);
-      resolve({ rateLimit, usageAvailable });
+      resolve({ rateLimit, usageAvailable, diagnostic });
     };
-    const timer = setTimeout(finish, READ_TIMEOUT_MS);
+    const timer = setTimeout(() => finish({ source: "official", code: "read-timeout", message: "Official Credit did not respond within 8 seconds.", remediation: "Restart or update Codex, then retry." }), READ_TIMEOUT_MS);
     timer.unref();
     const send = (message: object): void => { child.stdin.write(`${JSON.stringify(message)}\n`); };
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       if (completed) return;
       bytes += Buffer.byteLength(chunk);
-      if (bytes > MAX_OUTPUT_BYTES) return finish();
+      if (bytes > MAX_OUTPUT_BYTES) return finish({ source: "official", code: "invalid-response", message: "Official Credit returned an invalid response.", remediation: "Restart or update Codex, then retry." });
       buffer += chunk;
       let newline = buffer.indexOf("\n");
       while (newline >= 0) {
         const line = buffer.slice(0, newline);
         buffer = buffer.slice(newline + 1);
-        if (Buffer.byteLength(line) > MAX_LINE_BYTES) return finish();
+        if (Buffer.byteLength(line) > MAX_LINE_BYTES) return finish({ source: "official", code: "invalid-response", message: "Official Credit returned an invalid response.", remediation: "Restart or update Codex, then retry." });
         try {
           const message = JSON.parse(line) as { id?: number; result?: unknown };
           if (message.id === 1 && !initialized) {
@@ -120,17 +124,17 @@ export async function readOfficialSnapshot(): Promise<OfficialSnapshot> {
             usageRead = true;
             usageAvailable = hasValidUsage(message.result);
           }
-          if (initialized && rateRead && usageRead) finish();
+          if (initialized && rateRead && usageRead) finish(rateLimit ? undefined : { source: "official", code: "no-usage", message: "Codex did not return current Credit data for this account.", remediation: "Confirm you are signed in to Codex, then retry." });
         } catch {
-          // Ignore malformed protocol lines and keep the bounded read alive.
+          finish({ source: "official", code: "invalid-response", message: "Official Credit returned an invalid response.", remediation: "Restart or update Codex, then retry." });
         }
         newline = buffer.indexOf("\n");
       }
-      if (Buffer.byteLength(buffer) > MAX_LINE_BYTES) finish();
+      if (Buffer.byteLength(buffer) > MAX_LINE_BYTES) finish({ source: "official", code: "invalid-response", message: "Official Credit returned an invalid response.", remediation: "Restart or update Codex, then retry." });
     });
     child.stderr.resume();
-    child.once("error", finish);
-    child.once("close", finish);
+    child.once("error", (error: NodeJS.ErrnoException) => finish({ source: "official", code: error.code === "ENOENT" ? "codex-missing" : "unavailable", message: error.code === "ENOENT" ? "Official Credit could not start because Codex was not found." : "Official Credit could not be read.", remediation: error.code === "ENOENT" ? "Install or repair the Codex CLI, then run npm run setup." : "Restart Codex and retry." }));
+    child.once("close", () => finish({ source: "official", code: "unavailable", message: "Official Credit could not be read.", remediation: "Restart Codex and retry." }));
     send({
       id: 1,
       method: "initialize",

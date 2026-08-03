@@ -12,7 +12,8 @@ test("the dashboard rejects a Host that is not its current loopback authority", 
       observationWindow: { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" },
       officialCredit: { status: "unavailable" as const },
       estimatedCreditAttribution: [],
-      attributionQuality: { status: "unavailable" as const, message: "Official credit is unavailable, so estimates are unavailable." }
+      attributionQuality: { status: "unavailable" as const, message: "Official credit is unavailable, so estimates are unavailable." },
+      diagnostics: []
     };
   } });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

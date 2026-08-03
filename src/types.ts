@@ -7,6 +7,14 @@ export interface UsageViewModel {
   officialCredit: OfficialCredit;
   estimatedCreditAttribution: Array<{ model: string; credits: string; share: number }>;
   attributionQuality: { status: "estimated" | "unavailable"; message: string };
+  diagnostics: ReadinessDiagnostic[];
+}
+
+export interface ReadinessDiagnostic {
+  source: "official" | "local";
+  code: "codex-missing" | "ccusage-missing" | "read-timeout" | "invalid-response" | "unavailable" | "no-usage";
+  message: string;
+  remediation: string;
 }
 
 export interface SnapshotProvider {
@@ -24,11 +32,13 @@ export interface OfficialRateLimit {
 export interface OfficialSnapshot {
   rateLimit?: OfficialRateLimit;
   usageAvailable: boolean;
+  diagnostic?: ReadinessDiagnostic;
 }
 
 export interface LocalUsage {
   models: Array<{ model: string; tokens: number }>;
   skippedEntries: number;
+  diagnostic?: ReadinessDiagnostic;
 }
 
 export interface ObservationWindow {

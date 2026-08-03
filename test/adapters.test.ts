@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { hasValidUsage, normalizeRateLimits } from "../src/app-server.js";
-import { aggregateCcusage, buildCcusageArgs } from "../src/local.js";
+import { aggregateLocalUsage, buildCcusageArgs, resolveCcusageLauncher } from "../src/local.js";
 import { allocateCredits, makeViewModel } from "../src/credit.js";
 
 test("rate limits prefer the codex limit and reject incomplete values", () => {
@@ -13,7 +16,7 @@ test("rate limits prefer the codex limit and reject incomplete values", () => {
 });
 
 test("local aggregation retains only named model totals and generic skip counts", () => {
-  const result = aggregateCcusage({
+  const result = aggregateLocalUsage({
     sessions: [{
       directory: "privacy-canary-directory",
       sessionFile: "privacy-canary-session-file",
@@ -29,11 +32,28 @@ test("local aggregation retains only named model totals and generic skip counts"
   assert.doesNotMatch(JSON.stringify(result), /privacy-canary|mystery/);
 });
 
-test("ccusage is invoked directly, offline, and with UTC date-only bounds", () => {
+test("local usage invokes project-local ccusage for Codex sessions offline", () => {
   assert.deepEqual(buildCcusageArgs({ since: "2026-07-01", until: "2026-07-30", timezone: "UTC" }), [
-    "codex", "session", "--json", "--offline", "--since", "2026-07-01", "--until", "2026-07-30", "--timezone", "UTC"
+    "codex", "session", "--json", "--offline", "--since", "2026-07-01", "--until", "2026-07-30"
   ]);
   assert.throws(() => buildCcusageArgs({ since: "2026-07-01T00:00:00.000Z", until: "2026-07-30", timezone: "UTC" }));
+  assert.match(resolveCcusageLauncher() ?? "", /node_modules\/ccusage\/src\/cli\.js$/);
+});
+
+test("ccusage launcher resolution stays inside the installed package", () => {
+  const root = mkdtempSync(join(tmpdir(), "ccusage-launcher-"));
+  const packageDirectory = join(root, "node_modules", "ccusage");
+  try {
+    mkdirSync(join(packageDirectory, "src"), { recursive: true });
+    writeFileSync(join(packageDirectory, "src", "cli.js"), "");
+    writeFileSync(join(packageDirectory, "package.json"), JSON.stringify({ bin: { ccusage: "./src/cli.js" } }));
+    assert.equal(resolveCcusageLauncher(root), realpathSync(join(packageDirectory, "src", "cli.js")));
+    writeFileSync(join(packageDirectory, "package.json"), JSON.stringify({ bin: { ccusage: "../../outside.js" } }));
+    writeFileSync(join(root, "outside.js"), "");
+    assert.equal(resolveCcusageLauncher(root), undefined);
+  } finally {
+    rmSync(root, { recursive: true });
+  }
 });
 
 test("usage requires the exact summary and dailyUsageBuckets token shape", () => {
@@ -73,5 +93,21 @@ test("the public view model rounds every credit value to an integer before expor
   assert.deepEqual(view.estimatedCreditAttribution, [
     { model: "gpt-5.6-sol", credits: "9", share: 2 / 3 },
     { model: "gpt-5.6-terra", credits: "4", share: 1 / 3 }
+  ]);
+});
+
+test("availability diagnostics are preserved for the dashboard and API", () => {
+  const view = makeViewModel({
+    usageAvailable: false,
+    diagnostic: { source: "official", code: "read-timeout", message: "Official Credit did not respond within 8 seconds.", remediation: "Restart or update Codex, then retry." }
+  }, {
+    models: [],
+    skippedEntries: 0,
+    diagnostic: { source: "local", code: "codex-missing", message: "Local session usage could not start because Codex was not found.", remediation: "Install or repair the Codex CLI, then run npm run setup." }
+  }, { since: "2026-08-01", until: "2026-08-01", timezone: "UTC" });
+  assert.equal(view.attributionQuality.message, "Official Credit did not respond within 8 seconds.");
+  assert.deepEqual(view.diagnostics.map(({ source, code }) => ({ source, code })), [
+    { source: "official", code: "read-timeout" },
+    { source: "local", code: "codex-missing" }
   ]);
 });

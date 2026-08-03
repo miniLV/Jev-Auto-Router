@@ -13,7 +13,8 @@ const available: UsageViewModel = {
     { model: "gpt-5.6-terra", credits: "1.23", share: 0.1 },
     { model: "gpt-5.6-sol", credits: "11.11", share: 0.9 }
   ],
-  attributionQuality: { status: "estimated", message: "Estimated from local model-token shares; official credit remains authoritative." }
+  attributionQuality: { status: "estimated", message: "Estimated from local model-token shares; official credit remains authoritative." },
+  diagnostics: []
 };
 const provider: SnapshotProvider = { refresh: async () => { calls += 1; return available; } };
 const server = createDashboardServer(provider);
@@ -108,7 +109,8 @@ test("known read failures are represented as a 200 availability state", async ()
     observationWindow: { since: "2026-07-16", until: "2026-07-30", timezone: "UTC" },
     officialCredit: { status: "unavailable" },
     estimatedCreditAttribution: [],
-    attributionQuality: { status: "unavailable", message: "Official credit is unavailable, so estimates are unavailable." }
+    attributionQuality: { status: "unavailable", message: "Official credit is unavailable, so estimates are unavailable." },
+    diagnostics: [{ source: "official", code: "read-timeout", message: "Official Credit did not respond within 8 seconds.", remediation: "Restart or update Codex, then retry." }]
   }) });
   await new Promise<void>((resolve) => unavailableServer.listen(0, "127.0.0.1", resolve));
   const port = (unavailableServer.address() as AddressInfo).port;
@@ -124,4 +126,5 @@ test("known read failures are represented as a 200 availability state", async ()
   await new Promise<void>((resolve, reject) => unavailableServer.close((error) => error ? reject(error) : resolve()));
   assert.equal(response.status, 200);
   assert.equal(JSON.parse(response.body).officialCredit.status, "unavailable");
+  assert.match(response.body, /Official Credit did not respond within 8 seconds/);
 });

@@ -54,12 +54,14 @@ export function allocateCredits(used: string, models: LocalUsage["models"]): Arr
 }
 
 export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | undefined, observationWindow: ObservationWindow): UsageViewModel {
+  const diagnostics = [official.diagnostic, local?.diagnostic].filter((diagnostic): diagnostic is NonNullable<typeof diagnostic> => diagnostic !== undefined);
   if (!official.rateLimit) {
     return {
       observationWindow,
       officialCredit: { status: "unavailable" },
       estimatedCreditAttribution: [],
-      attributionQuality: { status: "unavailable", message: "Official credit is unavailable, so estimates are unavailable." }
+      attributionQuality: { status: "unavailable", message: official.diagnostic?.message ?? "Official credit is unavailable, so estimates are unavailable." },
+      diagnostics
     };
   }
   const rate = official.rateLimit;
@@ -78,7 +80,8 @@ export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | un
       observationWindow,
       officialCredit,
       estimatedCreditAttribution: [],
-      attributionQuality: { status: "unavailable", message: "Local model attribution is unavailable." }
+      attributionQuality: { status: "unavailable", message: local?.diagnostic?.message ?? "Local model attribution is unavailable." },
+      diagnostics
     };
   }
   return {
@@ -90,6 +93,7 @@ export function makeViewModel(official: OfficialSnapshot, local: LocalUsage | un
       message: official.usageAvailable
         ? "Estimated from local model-token shares. The local window is source-own and may not reconcile with official activity; official credit remains authoritative."
         : "Estimated from local model-token shares. The local window is source-own and is not reconciled with official activity; official credit remains authoritative."
-    }
+    },
+    diagnostics
   };
 }

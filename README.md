@@ -1,5 +1,19 @@
 # codex-auto-router
 
+## First use
+
+Run this from the repository root:
+
+```sh
+npm run setup
+```
+
+It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and the Codex CLI before installing locked dependencies and running the checks. If Node is too old, it prefers an existing Node manager (`nvm`; on Windows, `nvm` or WinGet; otherwise Homebrew when available), shows the exact repair command, and asks `yes/no`. Only the exact answer `yes` runs it. If no supported manager exists, setup stops with the official Node download URL. Codex is never installed automatically.
+
+Start the local dashboard with `npm start`. It binds only to `127.0.0.1`. If Codex or either usage source is unavailable later, the web page and `/api/usage` response identify the failed source and its recovery step.
+
+Local model attribution uses the exact-pinned, project-local `ccusage` package in offline mode. It reads existing Codex session logs, honors `CODEX_HOME`, and never falls back to a global install, `npx`, or a runtime download.
+
 
 
 ## Getting started
