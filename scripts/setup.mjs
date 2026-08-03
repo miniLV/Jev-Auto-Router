@@ -28,6 +28,13 @@ function capture(command, args) {
   return result.status === 0 ? result.stdout.trim() : "";
 }
 
+function codexInstallInstructions() {
+  if (process.platform === "win32") {
+    return "  Windows / npm: npm install --global @openai/codex\n  Then run: codex";
+  }
+  return "  macOS / Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n  Or with npm: npm install --global @openai/codex\n  Then run: codex";
+}
+
 function nvmScript() {
   const configured = process.env.NVM_DIR ? join(process.env.NVM_DIR, "nvm.sh") : "";
   if (configured && existsSync(configured)) return configured;
@@ -96,7 +103,14 @@ async function ensureNode() {
 
 await ensureNode();
 if (!canRun(npmCommand)) fail("npm is required. Reinstall Node.js 22+, then rerun npm run setup.");
-if (!canRun("codex")) fail("Codex CLI is required. Install or repair Codex, then rerun npm run setup.");
+if (!canRun("codex")) fail([
+  "Codex CLI is required for the full dashboard.",
+  "It provides official Credit through codex app-server and creates the session logs used by ccusage.",
+  "Install it yourself using one of the official routes:",
+  codexInstallInstructions(),
+  "Official guide: https://developers.openai.com/codex/cli/",
+  "After installation, run codex once to sign in, then rerun npm run setup."
+].join("\n"));
 
 console.log(`setup: Node ${process.version}, npm ${capture(npmCommand, ["--version"])}, Codex ${capture("codex", ["--version"]).split("\n")[0]}`);
 run(npmCommand, ["ci"]);

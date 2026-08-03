@@ -2,13 +2,31 @@
 
 ## First use
 
-Run this from the repository root:
+Install the Codex CLI first, then run this from the repository root. Codex CLI is a required runtime prerequisite for the full dashboard: the official Credit adapter talks to `codex app-server`, and the local `ccusage` adapter reads session logs created by Codex.
+
+Install Codex yourself using the [official Codex CLI guide](https://developers.openai.com/codex/cli/):
+
+```sh
+# macOS / Linux
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+
+# Windows, or any platform with npm
+npm install --global @openai/codex
+```
+
+Then run `codex` once and complete sign-in. Verify that the command is available:
+
+```sh
+codex --version
+```
+
+After that, run the project setup:
 
 ```sh
 npm run setup
 ```
 
-It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and the Codex CLI before installing locked dependencies and running the checks. If Node is too old, it prefers an existing Node manager (`nvm`; on Windows, `nvm` or WinGet; otherwise Homebrew when available), shows the exact repair command, and asks `yes/no`. Only the exact answer `yes` runs it. If no supported manager exists, setup stops with the official Node download URL. Codex is never installed automatically.
+It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and Codex CLI before installing locked dependencies and running the checks. If Node is too old, it prefers an existing Node manager (`nvm`; on Windows, `nvm` or WinGet; otherwise Homebrew when available), shows the exact repair command, and asks `yes/no`. Only the exact answer `yes` runs it. If no supported manager exists, setup stops with the official Node download URL. Codex CLI is never installed or logged into automatically; when it is missing, setup prints the manual installation commands and stops.
 
 Start the local dashboard with `npm start`. It binds only to `127.0.0.1`. If Codex or either usage source is unavailable later, the web page and `/api/usage` response identify the failed source and its recovery step.
 
