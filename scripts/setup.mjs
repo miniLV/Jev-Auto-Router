@@ -27,7 +27,7 @@ function codexInstallInstructions() {
   if (process.platform === "win32") {
     return "  Windows / npm: npm install --global @openai/codex\n  Then run: codex";
   }
-  return "  macOS / Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n  Or with npm: npm install --global @openai/codex\n  Then run: codex";
+  return "  macOS / Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n  macOS / Homebrew: brew install codex\n  Or with npm: npm install --global @openai/codex\n  Then run: codex";
 }
 
 function nodeInstallInstructions() {

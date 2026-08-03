@@ -10,6 +10,9 @@ Install Codex yourself using the [official Codex CLI guide](https://developers.o
 # macOS / Linux
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 
+# macOS / Homebrew
+brew install codex
+
 # Windows, or any platform with npm
 npm install --global @openai/codex
 ```
