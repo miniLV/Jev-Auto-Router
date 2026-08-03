@@ -26,7 +26,7 @@ After that, run the project setup:
 npm run setup
 ```
 
-It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and Codex CLI before installing locked dependencies and running the checks. If Node is too old, it prefers an existing Node manager (`nvm`; on Windows, `nvm` or WinGet; otherwise Homebrew when available), shows the exact repair command, and asks `yes/no`. Only the exact answer `yes` runs it. If no supported manager exists, setup stops with the official Node download URL. Codex CLI is never installed or logged into automatically; when it is missing, setup prints the manual installation commands and stops.
+It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and Codex CLI before installing locked project dependencies and running the checks. It never installs or upgrades Node.js or Codex CLI for you. If either prerequisite is missing, setup prints platform-specific commands and stops; run the command yourself, open a new terminal if needed, then rerun `npm run setup`. Codex CLI is never installed or logged into automatically.
 
 Start the local dashboard with `npm start`. It binds only to `127.0.0.1`. If Codex or either usage source is unavailable later, the web page and `/api/usage` response identify the failed source and its recovery step.
 
