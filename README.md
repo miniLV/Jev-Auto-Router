@@ -1,10 +1,114 @@
 # codex-auto-router
 
-## First use
+一个面向 Codex 主任务（Main Task）的安全自动路由约定：只有在任务足够独立、边界清晰且可以验证时，才交给一个原生子 Agent 在后台执行；否则由 Root 直接完成。
 
-Install the Codex CLI first, then run this from the repository root. Codex CLI is a required runtime prerequisite for the full dashboard: the official Credit adapter talks to `codex app-server`, and the local `ccusage` adapter reads session logs created by Codex.
+<p>
+  <a href="#zh">中文（默认）</a> · <a href="#en">English</a>
+</p>
 
-Install Codex yourself using the [official Codex CLI guide](https://developers.openai.com/codex/cli/):
+GitHub README 不执行自定义 JavaScript/CSS，因此这里使用可展开的语言切换；打开页面时默认展示中文。
+
+<a id="zh"></a>
+<details open>
+<summary><strong>中文（默认）</strong></summary>
+
+## 先决条件
+
+- Node.js 22 或更高版本
+- Codex CLI（用于 `codex app-server` 的官方 Credit，以及生成供本地 `ccusage` 读取的会话日志）
+
+请先自行安装并登录 Codex CLI，项目不会替用户安装或升级它：
+
+```sh
+# macOS / Linux
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+
+# macOS / Homebrew
+brew install codex
+
+# Windows，或任何支持 npm 的平台
+npm install --global @openai/codex
+
+codex
+codex --version
+npm run setup
+npm start
+```
+
+`npm run setup` 会检查 Node.js、npm 和 Codex CLI，安装项目锁定的依赖并运行检查。缺少前置条件时，它只打印对应的安装命令并停止。项目使用精确锁定的本地 `ccusage` 包读取已有会话日志，不依赖全局安装、`npx` 或运行时下载。
+
+## 核心流程：Main Task 如何自动路由
+
+每个 Main Task 会被自动**考虑一次**，但“考虑”不等于“委派”。路由器先读取唯一的 Runtime Router Policy；完整 Gate 不通过时，任务留在 Root，不会创建子 Agent。
+
+```mermaid
+flowchart TD
+  A[Main Task] --> B[Root 保留目标、授权、约束]
+  B --> C{完整 Gate 通过?}
+  C -- 否 --> D[ROOT_DIRECT<br/>Root 直接完成]
+  C -- 是 --> E{是否 Luna 白名单?}
+  E -- READ_LOG_WINDOW 或 WRITE_UNIT_TESTS --> F[LUNA_XHIGH_BACKGROUND<br/>gpt-5.6-luna / xhigh]
+  E -- 其他有界执行单元 --> G[TERRA_HIGH_BACKGROUND<br/>gpt-5.6-terra / high]
+  F --> H[Root 检查 diff 并验证]
+  G --> H
+  H --> I{结果可验证?}
+  I -- 是 --> J[Root 采纳并交付]
+  I -- 否 --> K[恢复或接管<br/>Terra 最多两次聚焦修复]
+```
+
+### 什么时候会委派
+
+以下条件必须全部满足：
+
+1. 工作量足够大，并且可以切成独立、有界的执行单元。
+2. 仓库没有 merge/rebase、所有权或基线歧义。
+3. 可以写出精确的读写路径；写入路径必须互斥。
+4. 已为每个写入路径保存 preflight baseline。
+5. 子 Agent 能在 fresh context 中完成，不依赖 Root 的隐含上下文。
+6. 有确定的验收方式、预期结果和安全恢复方式。
+7. Task Packet 完整，且预期收益大于准备、监督、复核和恢复成本。
+
+任何一项不确定，路由结果就是 `ROOT_DIRECT`。以下任务默认留在 Root：细小或强顺序任务、产品判断、外部操作、破坏性操作、无法可靠验证的任务，以及上下文耦合过深的任务。
+
+### 三种路由
+
+| 决策 | 原生 tuple | 使用范围 |
+| --- | --- | --- |
+| `ROOT_DIRECT` | 当前 Root 模型 | 不满足 Gate，或需要 Root 判断/外部操作 |
+| `LUNA_XHIGH_BACKGROUND` | `gpt-5.6-luna` · `xhigh` · `fork_turns: none` | 仅 `READ_LOG_WINDOW`、`WRITE_UNIT_TESTS` |
+| `TERRA_HIGH_BACKGROUND` | `gpt-5.6-terra` · `high` · `fork_turns: none` | 其他满足 Gate 的有界执行 |
+
+同一时间最多一个活跃子 Agent。子 Agent 不能继续委派、不能改变路由 tuple、不能扩大范围；它只负责 packet 中声明的路径和责任。
+
+### Root 始终负责什么
+
+Root 始终拥有用户意图、计划、授权和约束解释、高判断决策、外部动作、结果整合、最终验证与交付。子 Agent 的输出不会自动视为可信结果；Root 会对照 baseline 检查 diff，运行确定性验证，然后选择采纳或恢复。
+
+### 失败回退
+
+- Luna 失败：Root 先解决其路径上的 diff，随后最多为剩余的有界工作创建一次全新的 Terra 任务；不会再次创建 Luna。
+- Terra 失败：同一个子 Agent 最多进行两次聚焦修复，保持相同 tuple、上下文和工作面；仍失败则由 Root 接管。
+
+路由决定会以简短 receipt 出现在 Root 的 commentary 中，例如：
+
+```text
+Auto Router: TERRA_HIGH_BACKGROUND; reason: bounded independent implementation
+```
+
+完整规则见 [Runtime Router Policy](skills/codex-auto-router/references/routing-policy.md)、[Task Packet](skills/codex-auto-router/references/task-packet.md) 和 [Native Subagent Lifecycle](skills/codex-auto-router/references/native-subagent-lifecycle.md)。本仓库提供的是 Codex skill 与契约，不是一个独立的后台调度服务；实际路由发生在 Codex 的 Main Task 执行过程中。
+
+</details>
+
+<a id="en"></a>
+<details>
+<summary><strong>English</strong></summary>
+
+## Prerequisites
+
+- Node.js 22 or newer
+- Codex CLI, which provides official Credit through `codex app-server` and creates the session logs read by local `ccusage`
+
+Install and sign in to Codex CLI yourself; setup never installs or upgrades it for you:
 
 ```sh
 # macOS / Linux
@@ -15,114 +119,37 @@ brew install codex
 
 # Windows, or any platform with npm
 npm install --global @openai/codex
-```
 
-Then run `codex` once and complete sign-in. Verify that the command is available:
-
-```sh
+codex
 codex --version
-```
-
-After that, run the project setup:
-
-```sh
 npm run setup
+npm start
 ```
 
-It works on macOS, Linux, and Windows without requiring Bash. It checks Node.js 22+, npm, and Codex CLI before installing locked project dependencies and running the checks. It never installs or upgrades Node.js or Codex CLI for you. If either prerequisite is missing, setup prints platform-specific commands and stops; run the command yourself, open a new terminal if needed, then rerun `npm run setup`. Codex CLI is never installed or logged into automatically.
+`npm run setup` checks Node.js, npm, and Codex CLI, installs locked project dependencies, and runs the checks. If a prerequisite is missing, it prints the relevant command and stops. The project uses an exact, local `ccusage` dependency in offline mode; it does not use a global install, `npx`, or runtime downloads.
 
-Start the local dashboard with `npm start`. It binds only to `127.0.0.1`. If Codex or either usage source is unavailable later, the web page and `/api/usage` response identify the failed source and its recovery step.
+## Core flow: how a Main Task is routed
 
-Local model attribution uses the exact-pinned, project-local `ccusage` package in offline mode. It reads existing Codex session logs, honors `CODEX_HOME`, and never falls back to a global install, `npx`, or a runtime download.
+Every Main Task is automatically **considered once**. Consideration does not imply delegation. The router reads the single canonical Runtime Router Policy and creates a child only when every gate passes; otherwise the task stays with Root as `ROOT_DIRECT`.
 
+### Delegation gates
 
+The unit must be substantial and bounded, the repository must be safe, read/write ownership must be exact, writable paths must have a captured baseline, fresh-context execution must be suitable, verification and restoration must be deterministic, the Task Packet must be complete, and the expected benefit must exceed preparation, supervision, review, and recovery cost. Uncertainty means `ROOT_DIRECT`.
 
-## Getting started
+### Route decisions
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+| Decision | Native tuple | Scope |
+| --- | --- | --- |
+| `ROOT_DIRECT` | Current Root model | Gate failure, judgment, external or destructive work |
+| `LUNA_XHIGH_BACKGROUND` | `gpt-5.6-luna` · `xhigh` · `fork_turns: none` | Only `READ_LOG_WINDOW` and `WRITE_UNIT_TESTS` |
+| `TERRA_HIGH_BACKGROUND` | `gpt-5.6-terra` · `high` · `fork_turns: none` | Other eligible bounded execution |
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Only one child may be active. A child cannot delegate, change its tuple, or expand its scope. Root keeps intent, planning, high-judgment decisions, external actions, integration, final verification, and delivery. Root compares the child output with the baseline before adopting or restoring it.
 
-## Add your files
+### Recovery
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+After a Luna failure, Root resolves its paths and may create one fresh Terra task for the remaining bounded work. Terra gets at most two focused repairs with the same tuple and context; after that Root takes over.
 
-```
-cd existing_repo
-git remote add origin https://gitlab.com/your-group/codex-auto-router.git
-git branch -M main
-git push -uf origin main
-```
+The full contract is documented in [Runtime Router Policy](skills/codex-auto-router/references/routing-policy.md), [Task Packet](skills/codex-auto-router/references/task-packet.md), and [Native Subagent Lifecycle](skills/codex-auto-router/references/native-subagent-lifecycle.md). This repository supplies the Codex skill and contract, not a standalone background scheduler; routing happens while Codex executes the Main Task.
 
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.com/your-group/codex-auto-router/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+</details>
