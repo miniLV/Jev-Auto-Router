@@ -470,6 +470,10 @@ async function finishTask(task) {
 
 ## 21. Final architecture diagram
 
+![Jev Auto Router target architecture](assets/jev-auto-router-sketchboard.png)
+
+[Editable sketchboard source](assets/jev-auto-router-sketchboard.html)
+
 ```text
                           ONE CODEX SESSION
 

@@ -1,6 +1,6 @@
 # Jev Auto Router
 
-**让 Codex 在同一任务中按模型调用选择合适的 GPT 档位，并验证最终交付是否真的完成。**
+**Jev Auto Router（Jev Router）是 Codex 的逐调用 GPT 模型路由原型：[TypeSafe 的 Jev](https://docs.typesafe.ai/introduction) 负责选择，任务结束后独立验收。**
 
 架构中，Jev 负责每次调用的模型与推理档位选择；本地 Responses 代理负责保持 Codex 会话和工具循环连续；任务结束后独立验收。Router Compass 把选路、实际用量和验收结果放在一起，回答一个问题：**少用旗舰模型之后，任务是否仍然正确完成，整体开销是否真的下降？**
 
@@ -8,6 +8,12 @@
 > **当前状态：架构已定，运行时处于原型验证阶段。** 仓库已有逐调用代理与测试，但真实 Codex 工具循环中的跨模型切换、完整验收链和节省效果尚未通过端到端验证。请勿把下面的设计当作已经可投入生产的安装说明。
 
 [English](README.en.md) · [架构方案](docs/solution.md) · [架构决策 ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [许可证](LICENSE)
+
+## 前置条件
+
+- **TypeSafe 账号与 Jev API key。** 按 [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart) 从控制台获取密钥。当前代理调用 Jev 时读取环境变量 `JEV_API_KEY`；TypeSafe 官方示例使用 `TYPESAFE_API_KEY`，两者可以设置为同一密钥。不要将密钥提交到仓库。
+- **Node.js 22+、已登录的 Codex CLI，以及宿主实际可请求的模型与推理档位。** 仅有 Jev 密钥不足以运行真实的逐调用路由。
+- **目前是验证原型。** 真实 Codex 工具循环中的跨模型切换仍须通过下文的 P0 验证，尚无开箱即用的生产安装流程。
 
 ## 为什么是逐调用路由
 
@@ -17,26 +23,7 @@ Jev Auto Router 把选择点放在**每次有意义的模型调用**上，而不
 
 ## 核心闭环
 
-```mermaid
-flowchart TD
-    A["同一 Codex 会话：下一次模型调用"] --> B["本地 Responses 代理"]
-    B --> C{"这次调用可参与路由？"}
-    C -- "停用或固定档位" --> H["原模型或固定档位"]
-    C -- "隐私限制" --> G["Terra 基线；记录原因"]
-    C -- "可以" --> D["宿主可请求的模型与推理档位组合"]
-    D --> E["Jev：一次 Choice"]
-    E -- "有效选择" --> F["选中的模型与档位"]
-    E -- "失败或低置信" --> G["Terra 基线；记录原因"]
-    H --> I["原生转发；记录实际模型与用量"]
-    F --> I
-    G --> I
-    I --> J["响应回到同一会话"]
-    J -- "下一次调用" --> A
-    J -- "任务结束" --> K["固定档位的独立验收"]
-    K -- "未通过：有界纠错" --> A
-    K -- "通过" --> L["Router Compass：质量与开销"]
-    I -. "调用事实" .-> L
-```
+![Jev Auto Router 逐调用架构：Codex 会话经本地代理、Jev、执行门禁和原生 Responses 路由，任务结束后独立验收](docs/assets/jev-auto-router-sketchboard.png)
 
 ### Jev 做什么
 

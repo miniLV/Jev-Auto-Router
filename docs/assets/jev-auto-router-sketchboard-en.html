@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jev Auto Router · Sketch Architecture</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #625e56;
+      --grid: rgba(37, 42, 49, .055);
+      --blue: #3867d6;
+      --blue-soft: #e0eaff;
+      --teal: #20898d;
+      --teal-soft: #d5f2ee;
+      --green: #3f8f52;
+      --green-soft: #e1f2d7;
+      --orange: #d76838;
+      --orange-soft: #ffe5d1;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff1b5;
+      --pink: #d35f84;
+      --pink-soft: #ffe3eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Chalkboard SE", "Marker Felt", "Avenir Next", sans-serif;
+    }
+    .page {
+      position: relative;
+      width: 1800px;
+      height: 1180px;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+    }
+    .kicker {
+      position: absolute;
+      top: 39px;
+      left: 72px;
+      color: var(--teal);
+      font: 900 16px "Avenir Next", sans-serif;
+      letter-spacing: .16em;
+    }
+    h1 {
+      position: absolute;
+      top: 66px;
+      left: 68px;
+      margin: 0;
+      font-size: 59px;
+      line-height: 1.12;
+      letter-spacing: .015em;
+    }
+    .subtitle {
+      position: absolute;
+      top: 139px;
+      left: 72px;
+      color: var(--muted);
+      font: 700 21px "Avenir Next", sans-serif;
+    }
+    .stamp {
+      position: absolute;
+      top: 55px;
+      right: 78px;
+      padding: 12px 21px;
+      border: 3px solid var(--orange);
+      border-radius: 19px 15px 20px 16px;
+      background: var(--orange-soft);
+      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
+      transform: rotate(1.5deg);
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .lane {
+      position: absolute;
+      left: 55px;
+      width: 1690px;
+      border: 2px dashed rgba(37,42,49,.29);
+      border-radius: 28px 23px 30px 25px;
+      background: rgba(255,255,255,.3);
+    }
+    .lane.call { top: 194px; height: 575px; }
+    .lane.finish { top: 801px; height: 327px; }
+    .lane-label {
+      position: absolute;
+      left: 30px;
+      top: -18px;
+      padding: 5px 16px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 15px 12px;
+      background: var(--paper);
+      font-size: 18px;
+      font-weight: 900;
+      z-index: 4;
+    }
+    .card {
+      position: absolute;
+      z-index: 3;
+      padding: 20px 21px;
+      border: 3px solid var(--stroke);
+      border-radius: 23px 18px 25px 19px;
+      background: var(--fill);
+      box-shadow: 8px 9px 0 rgba(37,42,49,.12);
+      transform: rotate(var(--tilt, 0deg));
+    }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      line-height: 1.15;
+    }
+    .card p {
+      margin: 0;
+      color: #3f4242;
+      font: 700 18px/1.48 "Avenir Next", sans-serif;
+    }
+    .card .small { font-size: 16px; line-height: 1.42; }
+    .tag {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 5px 11px;
+      border: 2px solid rgba(37,42,49,.38);
+      border-radius: 12px 9px 11px 10px;
+      background: rgba(255,255,255,.62);
+      font: 900 15px "Avenir Next", sans-serif;
+    }
+    .adapter {
+      left: 102px; top: 244px; width: 330px; height: 63px;
+      padding: 13px 17px; --tilt: -1deg;
+      font: 800 16px/1.35 "Avenir Next", sans-serif;
+      text-align: center;
+    }
+    .host { left: 100px; top: 330px; width: 270px; height: 222px; --tilt: -.7deg; }
+    .proxy { left: 455px; top: 320px; width: 290px; height: 242px; --tilt: .7deg; }
+    .jev { left: 830px; top: 330px; width: 225px; height: 222px; --tilt: -1deg; text-align: center; }
+    .guard { left: 1140px; top: 330px; width: 225px; height: 222px; --tilt: .8deg; }
+    .responses { left: 1435px; top: 320px; width: 290px; height: 242px; --tilt: -.5deg; }
+    .fallback {
+      left: 739px; top: 584px; width: 406px; height: 99px;
+      padding: 14px 20px; --tilt: .35deg; text-align: center;
+    }
+    .fallback h2 { margin: 0 0 5px; font-size: 23px; }
+    .fallback p { font-size: 16px; }
+    .host p { font-size: 16px; line-height: 1.4; }
+    .proxy p { font-size: 16px; line-height: 1.42; }
+    .guard h2 { font-size: 25px; }
+    .guard p { font-size: 16px; line-height: 1.42; }
+    .responses p { font-size: 16px; line-height: 1.42; }
+    .fallback p { font-size: 15px; line-height: 1.38; }
+    .verify { left: 185px; top: 870px; width: 430px; height: 195px; --tilt: -.6deg; }
+    .pass { left: 735px; top: 854px; width: 245px; height: 102px; --tilt: .9deg; }
+    .fail { left: 735px; top: 970px; width: 245px; height: 102px; --tilt: -.6deg; }
+    .outcome h2 { margin: 0 0 3px; font-size: 23px; }
+    .outcome p { font-size: 16px; }
+    .compass { left: 1185px; top: 862px; width: 420px; height: 170px; --tilt: .6deg; }
+    .compass h2 { font-size: 27px; }
+    .line-label {
+      position: absolute;
+      z-index: 4;
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--muted);
+      font: 800 16px "Avenir Next", sans-serif;
+      white-space: nowrap;
+    }
+    .line-label.bypass { left: 1015px; top: 243px; color: var(--orange); }
+    .line-label.stream { left: 615px; top: 705px; color: var(--blue); }
+    .line-label.correction { left: 250px; top: 1081px; color: var(--pink); }
+    .line-label.receipt { left: 1265px; top: 777px; color: var(--muted); }
+    .footnote {
+      position: absolute;
+      left: 72px;
+      bottom: 17px;
+      color: #555950;
+      font: 700 16px "Avenir Next", sans-serif;
+    }
+    svg.paths { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .flow { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; marker-end: url(#arrow); }
+    .native { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linejoin: round; marker-end: url(#arrow-blue); }
+    .fallback-edge { fill: none; stroke: var(--orange); stroke-width: 2.7; stroke-dasharray: 9 8; stroke-linejoin: round; marker-end: url(#arrow-orange); }
+    .feedback { fill: none; stroke: var(--pink); stroke-width: 2.7; stroke-dasharray: 9 8; stroke-linejoin: round; marker-end: url(#arrow-pink); }
+    .record { fill: none; stroke: #79746e; stroke-width: 2.4; stroke-dasharray: 6 7; stroke-linejoin: round; marker-end: url(#arrow-gray); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">SINGLE SESSION · PER-CALL CHOICE · VERIFIED DELIVERY</div>
+    <h1>Jev Auto Router | One Call, One Choice</h1>
+    <div class="subtitle">Choose a model per call in the same Codex session; verify independently when the task ends</div>
+    <div class="stamp">Target architecture · P0 unverified</div>
+
+    <div class="lane call"><span class="lane-label">① At call time: choose and execute</span></div>
+    <div class="lane finish"><span class="lane-label">② At task end: verify and record</span></div>
+
+    <svg class="paths" width="1800" height="1180" viewBox="0 0 1800 1180" aria-hidden="true">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/></marker>
+        <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#3867d6"/></marker>
+        <marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d76838"/></marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d35f84"/></marker>
+        <marker id="arrow-gray" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#79746e"/></marker>
+      </defs>
+      <path class="flow" d="M232 307 L232 322"/>
+      <path class="flow" d="M370 440 L447 440"/>
+      <path class="flow" d="M745 440 L822 440"/>
+      <path class="flow" d="M1055 440 L1132 440"/>
+      <path class="flow" d="M1365 440 L1427 440"/>
+      <path class="fallback-edge" d="M600 562 L600 629 L731 629"/>
+      <path class="fallback-edge" d="M945 552 L945 576"/>
+      <path class="fallback-edge" d="M1250 552 L1250 566 L1100 566 L1100 576"/>
+      <path class="fallback-edge" d="M1145 630 L1640 630 L1640 570"/>
+      <path class="native" d="M1560 562 L1560 735 L235 735 L235 560"/>
+      <path class="flow" d="M135 552 L135 833 L370 833 L370 862"/>
+      <path class="flow" d="M570 898 L727 898"/>
+      <path class="flow" d="M570 1005 L727 1005"/>
+      <path class="record" d="M980 894 L1177 894"/>
+      <path class="record" d="M980 1003 L1115 1003 L1115 968 L1177 968"/>
+      <path class="record" d="M1305 735 L1305 854"/>
+      <path class="feedback" d="M860 1042 L860 1114 L80 1114 L80 445 L92 445"/>
+    </svg>
+
+    <div class="card blue adapter">Host adapter<br>Task ID · constraints · end signal</div>
+    <section class="card blue host">
+      <h2>Codex Host</h2>
+      <p>Holds the session,<br>tools, and permissions;<br>issues a request for<br>each model call.</p>
+      <span class="tag">One session</span>
+    </section>
+    <section class="card teal proxy">
+      <h2>Local proxy</h2>
+      <p>Checks OFF, privacy,<br>and basic calls; lists the host's<br>eligible model × reasoning<br>tier candidates.</p>
+      <span class="tag">Compatibility / eligibility</span>
+    </section>
+    <section class="card green jev">
+      <h2>Jev</h2>
+      <p>Makes one Choice<br>from valid candidates.</p>
+      <span class="tag">Only semantic router</span>
+    </section>
+    <section class="card yellow guard">
+      <h2>Execution gate</h2>
+      <p>Checks the selected<br>model and tier, permissions,<br>and current state.</p>
+      <span class="tag">ALLOW / DENY</span>
+    </section>
+    <section class="card blue responses">
+      <h2>Native Responses</h2>
+      <p>Runs the selected model and tier;<br>streams events unchanged back to<br>Codex Host.</p>
+      <span class="tag">Luna · Terra · Sol · GPT-6*</span>
+    </section>
+    <section class="card orange fallback">
+      <h2>Explicit fallback · record reason</h2>
+      <p>Privacy / failure / DENY → configured baseline;<br>OFF → original request; basic call → fixed tier.</p>
+    </section>
+    <div class="line-label stream">Native streaming response + actual usage</div>
+    <div class="line-label receipt">Call receipt</div>
+
+    <section class="card pink verify">
+      <h2>Independent verification</h2>
+      <p>Checks the original request against<br>diff, tests, artifacts, and constraints;<br>uses a fixed verification tier,<br>outside economic routing.</p>
+    </section>
+    <section class="card green pass outcome">
+      <h2>PASS → deliver</h2>
+      <p>Evidence for every acceptance condition</p>
+    </section>
+    <section class="card orange fail outcome">
+      <h2>FAIL → fix</h2>
+      <p>At most two rounds, then Root takes over</p>
+    </section>
+    <section class="card teal compass">
+      <h2>Router Compass</h2>
+      <p>Summarizes route choices, actual usage,<br>cost, and verification results;<br>records and analyzes only; does not route.</p>
+    </section>
+    <div class="line-label correction">Failure facts return to the same session</div>
+    <div class="footnote">* GPT-6 enters the candidate set only after the upgrade threshold is met; per-call switching must first pass P0 validation of a real same-session A→B→A tool loop.</div>
+  </main>
+</body>
+</html>

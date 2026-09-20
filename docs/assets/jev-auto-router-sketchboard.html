@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jev Auto Router · 架构手绘图</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #625e56;
+      --grid: rgba(37, 42, 49, .055);
+      --blue: #3867d6;
+      --blue-soft: #e0eaff;
+      --teal: #20898d;
+      --teal-soft: #d5f2ee;
+      --green: #3f8f52;
+      --green-soft: #e1f2d7;
+      --orange: #d76838;
+      --orange-soft: #ffe5d1;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff1b5;
+      --pink: #d35f84;
+      --pink-soft: #ffe3eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    .page {
+      position: relative;
+      width: 1800px;
+      height: 1180px;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+    }
+    .kicker {
+      position: absolute;
+      top: 39px;
+      left: 72px;
+      color: var(--teal);
+      font: 900 16px "Avenir Next", "PingFang SC", sans-serif;
+      letter-spacing: .16em;
+    }
+    h1 {
+      position: absolute;
+      top: 66px;
+      left: 68px;
+      margin: 0;
+      font-size: 59px;
+      line-height: 1.12;
+      letter-spacing: .015em;
+    }
+    .subtitle {
+      position: absolute;
+      top: 139px;
+      left: 72px;
+      color: var(--muted);
+      font: 700 21px "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp {
+      position: absolute;
+      top: 55px;
+      right: 78px;
+      padding: 12px 21px;
+      border: 3px solid var(--orange);
+      border-radius: 19px 15px 20px 16px;
+      background: var(--orange-soft);
+      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
+      transform: rotate(1.5deg);
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .lane {
+      position: absolute;
+      left: 55px;
+      width: 1690px;
+      border: 2px dashed rgba(37,42,49,.29);
+      border-radius: 28px 23px 30px 25px;
+      background: rgba(255,255,255,.3);
+    }
+    .lane.call { top: 194px; height: 575px; }
+    .lane.finish { top: 801px; height: 327px; }
+    .lane-label {
+      position: absolute;
+      left: 30px;
+      top: -18px;
+      padding: 5px 16px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 15px 12px;
+      background: var(--paper);
+      font-size: 18px;
+      font-weight: 900;
+      z-index: 4;
+    }
+    .card {
+      position: absolute;
+      z-index: 3;
+      padding: 20px 21px;
+      border: 3px solid var(--stroke);
+      border-radius: 23px 18px 25px 19px;
+      background: var(--fill);
+      box-shadow: 8px 9px 0 rgba(37,42,49,.12);
+      transform: rotate(var(--tilt, 0deg));
+    }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      line-height: 1.15;
+    }
+    .card p {
+      margin: 0;
+      color: #3f4242;
+      font: 700 18px/1.48 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .card .small { font-size: 16px; line-height: 1.42; }
+    .tag {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 5px 11px;
+      border: 2px solid rgba(37,42,49,.38);
+      border-radius: 12px 9px 11px 10px;
+      background: rgba(255,255,255,.62);
+      font: 900 15px "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .adapter {
+      left: 102px; top: 244px; width: 260px; height: 63px;
+      padding: 13px 17px; --tilt: -1deg;
+      font: 800 17px/1.35 "Avenir Next", "PingFang SC", sans-serif;
+      text-align: center;
+    }
+    .host { left: 100px; top: 330px; width: 270px; height: 222px; --tilt: -.7deg; }
+    .proxy { left: 455px; top: 320px; width: 290px; height: 242px; --tilt: .7deg; }
+    .jev { left: 830px; top: 330px; width: 225px; height: 222px; --tilt: -1deg; text-align: center; }
+    .guard { left: 1140px; top: 330px; width: 225px; height: 222px; --tilt: .8deg; }
+    .responses { left: 1435px; top: 320px; width: 290px; height: 242px; --tilt: -.5deg; }
+    .fallback {
+      left: 739px; top: 584px; width: 406px; height: 99px;
+      padding: 14px 20px; --tilt: .35deg; text-align: center;
+    }
+    .fallback h2 { margin: 0 0 5px; font-size: 23px; }
+    .fallback p { font-size: 16px; }
+    .verify { left: 185px; top: 870px; width: 385px; height: 176px; --tilt: -.6deg; }
+    .pass { left: 735px; top: 854px; width: 245px; height: 82px; --tilt: .9deg; }
+    .fail { left: 735px; top: 960px; width: 245px; height: 82px; --tilt: -.6deg; }
+    .outcome h2 { margin: 0 0 3px; font-size: 23px; }
+    .outcome p { font-size: 16px; }
+    .compass { left: 1185px; top: 862px; width: 420px; height: 170px; --tilt: .6deg; }
+    .compass h2 { font-size: 27px; }
+    .line-label {
+      position: absolute;
+      z-index: 4;
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--muted);
+      font: 800 16px "Avenir Next", "PingFang SC", sans-serif;
+      white-space: nowrap;
+    }
+    .line-label.bypass { left: 1015px; top: 243px; color: var(--orange); }
+    .line-label.stream { left: 615px; top: 705px; color: var(--blue); }
+    .line-label.correction { left: 250px; top: 1081px; color: var(--pink); }
+    .line-label.receipt { left: 1265px; top: 777px; color: var(--muted); }
+    .footnote {
+      position: absolute;
+      left: 72px;
+      bottom: 17px;
+      color: #555950;
+      font: 700 16px "Avenir Next", "PingFang SC", sans-serif;
+    }
+    svg.paths { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .flow { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linejoin: round; marker-end: url(#arrow); }
+    .native { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linejoin: round; marker-end: url(#arrow-blue); }
+    .fallback-edge { fill: none; stroke: var(--orange); stroke-width: 2.7; stroke-dasharray: 9 8; stroke-linejoin: round; marker-end: url(#arrow-orange); }
+    .feedback { fill: none; stroke: var(--pink); stroke-width: 2.7; stroke-dasharray: 9 8; stroke-linejoin: round; marker-end: url(#arrow-pink); }
+    .record { fill: none; stroke: #79746e; stroke-width: 2.4; stroke-dasharray: 6 7; stroke-linejoin: round; marker-end: url(#arrow-gray); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">单一会话 · 逐次选择 · 验收交付</div>
+    <h1>Jev Auto Router｜一次调用，一次选择</h1>
+    <div class="subtitle">同一 Codex 会话里按调用选模型；任务结束后独立验收</div>
+    <div class="stamp">目标架构 · P0 待验证</div>
+
+    <div class="lane call"><span class="lane-label">① 调用时：选择与执行</span></div>
+    <div class="lane finish"><span class="lane-label">② 任务结束：验收与记录</span></div>
+
+    <svg class="paths" width="1800" height="1180" viewBox="0 0 1800 1180" aria-hidden="true">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/></marker>
+        <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#3867d6"/></marker>
+        <marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d76838"/></marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d35f84"/></marker>
+        <marker id="arrow-gray" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#79746e"/></marker>
+      </defs>
+      <path class="flow" d="M232 307 L232 322"/>
+      <path class="flow" d="M370 440 L447 440"/>
+      <path class="flow" d="M745 440 L822 440"/>
+      <path class="flow" d="M1055 440 L1132 440"/>
+      <path class="flow" d="M1365 440 L1427 440"/>
+      <path class="fallback-edge" d="M600 562 L600 629 L731 629"/>
+      <path class="fallback-edge" d="M945 552 L945 576"/>
+      <path class="fallback-edge" d="M1250 552 L1250 566 L1100 566 L1100 576"/>
+      <path class="fallback-edge" d="M1145 630 L1640 630 L1640 570"/>
+      <path class="native" d="M1560 562 L1560 735 L235 735 L235 560"/>
+      <path class="flow" d="M135 552 L135 833 L370 833 L370 862"/>
+      <path class="flow" d="M570 898 L727 898"/>
+      <path class="flow" d="M570 1005 L727 1005"/>
+      <path class="record" d="M980 894 L1177 894"/>
+      <path class="record" d="M980 1003 L1115 1003 L1115 968 L1177 968"/>
+      <path class="record" d="M1305 735 L1305 854"/>
+      <path class="feedback" d="M860 1042 L860 1114 L80 1114 L80 445 L92 445"/>
+    </svg>
+
+    <div class="card blue adapter">宿主适配器<br>任务 ID · 约束 · 结束信号</div>
+    <section class="card blue host">
+      <h2>Codex Host</h2>
+      <p>持有会话、工具与权限；<br>每次模型调用发出请求。</p>
+      <span class="tag">同一个会话</span>
+    </section>
+    <section class="card teal proxy">
+      <h2>本地代理</h2>
+      <p>检查 OFF、隐私与基础调用；<br>列出宿主可请求的<br>模型 × 推理档位候选。</p>
+      <span class="tag">兼容性 / 候选资格</span>
+    </section>
+    <section class="card green jev">
+      <h2>Jev</h2>
+      <p>对合法候选<br>做一次 Choice。</p>
+      <span class="tag">唯一语义选路者</span>
+    </section>
+    <section class="card yellow guard">
+      <h2>执行门禁</h2>
+      <p>代码核对所选组合、<br>权限和当前状态。</p>
+      <span class="tag">ALLOW / DENY</span>
+    </section>
+    <section class="card blue responses">
+      <h2>原生 Responses</h2>
+      <p>执行所选模型与档位；<br>流式事件原样回到<br>Codex Host。</p>
+      <span class="tag">Luna · Terra · Sol · GPT-6*</span>
+    </section>
+    <section class="card orange fallback">
+      <h2>明确回退 · 记因</h2>
+      <p>隐私 / 失败 / DENY → 配置基线；<br>OFF → 原请求；基础调用 → 固定档位。</p>
+    </section>
+    <div class="line-label stream">原生流式响应 + 实际用量</div>
+    <div class="line-label receipt">调用收据</div>
+
+    <section class="card pink verify">
+      <h2>独立验收</h2>
+      <p>按原始需求检查 diff、测试、<br>产物与约束；固定验收档位，<br>不参与经济路由。</p>
+    </section>
+    <section class="card green pass outcome">
+      <h2>PASS → 交付</h2>
+      <p>每项验收条件有证据</p>
+    </section>
+    <section class="card orange fail outcome">
+      <h2>FAIL → 修复</h2>
+      <p>最多两轮，之后 Root 接管</p>
+    </section>
+    <section class="card teal compass">
+      <h2>Router Compass</h2>
+      <p>汇总路由选择、实际用量、<br>成本与验收结果；<br>只做记录与分析，不参与选路。</p>
+    </section>
+    <div class="line-label correction">失败事实返回同一会话</div>
+    <div class="footnote">* GPT-6 仅在升级门槛满足后进入候选；逐调用切换须先通过真实同会话 A→B→A 工具循环的 P0 验证。</div>
+  </main>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Jev Auto Router
 
-**Let Codex choose the right GPT tier for each model call in one task, then verify the delivered result.**
+**Jev Auto Router (Jev Router) is an experimental per-call GPT model router for Codex: [TypeSafe's Jev](https://docs.typesafe.ai/introduction) makes the choice, and independent verification checks the finished task.**
 
 In the architecture, Jev chooses the model and reasoning effort for each call. A local Responses proxy preserves the Codex session and tool loop. Independent verification checks the finished task. Router Compass connects the route, actual usage, and acceptance result to answer one question: **Did using less frontier capacity still complete the task correctly and reduce the full delivery cost?**
 
@@ -8,6 +8,12 @@ In the architecture, Jev chooses the model and reasoning effort for each call. A
 > **Status: architecture approved; runtime is a validation prototype.** This repository has a per-call proxy and tests, but cross-model switching in a real Codex tool loop, the complete verification path, and savings have not been proven end to end. The design below is not a production installation guide.
 
 [简体中文](README.md) · [Architecture](docs/solution.md) · [Decision ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [License](LICENSE)
+
+## Prerequisites
+
+- **A TypeSafe account and Jev API key.** Get a key through the [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart). This proxy reads `JEV_API_KEY` when it calls Jev. TypeSafe's own examples use `TYPESAFE_API_KEY`; both variables can hold the same key. Never commit the key.
+- **Node.js 22+, a signed-in Codex CLI, and access to the model and reasoning-effort pairs you want to route.** A Jev key alone does not make live per-call routing available.
+- **This is still a validation prototype.** Cross-model switching inside a real Codex tool loop must pass the P0 proof below; there is no production-ready install-and-run path yet.
 
 ## Why route per call?
 
@@ -17,26 +23,7 @@ Jev Auto Router makes a choice at **each meaningful model call** inside the same
 
 ## The delivery loop
 
-```mermaid
-flowchart TD
-    A["Same Codex session: next model call"] --> B["Local Responses proxy"]
-    B --> C{"Eligible for routing?"}
-    C -- "Off or fixed tier" --> H["Host model or fixed tier"]
-    C -- "Privacy refusal" --> G["Terra baseline; record reason"]
-    C -- "Yes" --> D["Host-requestable model and effort pairs"]
-    D --> E["Jev: one Choice"]
-    E -- "Valid choice" --> F["Selected model and effort"]
-    E -- "Failure or low confidence" --> G["Terra baseline; record reason"]
-    H --> I["Native forwarding; record actual model and usage"]
-    F --> I
-    G --> I
-    I --> J["Response returns to the same session"]
-    J -- "Next call" --> A
-    J -- "Task ends" --> K["Independent verification on a fixed tier"]
-    K -- "Fail: bounded correction" --> A
-    K -- "Pass" --> L["Router Compass: quality and cost"]
-    I -. "Call facts" .-> L
-```
+![Jev Auto Router per-call architecture: a Codex session passes through the local proxy, Jev, execution guard, and native Responses before independent task verification](docs/assets/jev-auto-router-sketchboard-en.png)
 
 ### What Jev does
 
