@@ -1,0 +1,40 @@
+{
+  "name": "jev-auto-router",
+  "version": "0.2.0",
+  "description": "Jev-native capability and model routing for Codex: Jev selects, the Policy Guard validates, Codex executes, and Root verifies and accepts.",
+  "author": {
+    "name": "miniLV",
+    "url": "https://github.com/miniLV"
+  },
+  "homepage": "https://github.com/miniLV/jev-auto-router",
+  "repository": "https://github.com/miniLV/jev-auto-router",
+  "license": "Apache-2.0",
+  "keywords": [
+    "codex",
+    "jev",
+    "routing",
+    "subagents",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Jev Auto Router",
+    "shortDescription": "Jev-native, recoverable routing and delivery for Codex.",
+    "longDescription": "Considers every Main Task once: Root authors a bounded Task Capsule, Jev selects the route from a truthful runtime capability catalog, a deterministic Policy Guard validates the plan, Codex executes it natively, and Root independently verifies, reviews when triggered, and accepts.",
+    "developerName": "miniLV",
+    "category": "Productivity",
+    "capabilities": [
+      "skills"
+    ],
+    "websiteURL": "https://github.com/miniLV/jev-auto-router",
+    "composerIcon": "./assets/auto-router-cover.png",
+    "logo": "./assets/auto-router-cover.png",
+    "logoDark": "./assets/auto-router-cover.png",
+    "screenshots": [
+      "./assets/auto-router-cover.png"
+    ],
+    "defaultPrompt": [
+      "Apply the Jev Auto Router policy to the Main Task."
+    ]
+  }
+}

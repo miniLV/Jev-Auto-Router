@@ -1,93 +1,90 @@
-# codex-auto-router
+# Jev Auto Router
 
+**让 Codex 在同一任务中按模型调用选择合适的 GPT 档位，并验证最终交付是否真的完成。**
 
+架构中，Jev 负责每次调用的模型与推理档位选择；本地 Responses 代理负责保持 Codex 会话和工具循环连续；任务结束后独立验收。Router Compass 把选路、实际用量和验收结果放在一起，回答一个问题：**少用旗舰模型之后，任务是否仍然正确完成，整体开销是否真的下降？**
 
-## Getting started
+> [!IMPORTANT]
+> **当前状态：架构已定，运行时处于原型验证阶段。** 仓库已有逐调用代理与测试，但真实 Codex 工具循环中的跨模型切换、完整验收链和节省效果尚未通过端到端验证。请勿把下面的设计当作已经可投入生产的安装说明。
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+[English](README.en.md) · [架构方案](docs/solution.md) · [架构决策 ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [许可证](LICENSE)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## 为什么是逐调用路由
 
-## Add your files
+一个编码任务既有理解需求、排查复杂故障的高强度推理，也有读取文件、执行已知修改、跟进工具结果的常规调用。整段任务固定使用旗舰模型，会让简单调用占用昂贵能力；整段任务固定使用轻量模型，又可能拖累困难环节。
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Jev Auto Router 把选择点放在**每次有意义的模型调用**上，而不是为每个任务启动一个新 worker。例如，同一个会话可以由 Sol 理清问题，Luna Max 执行明确的后续步骤，Terra 处理一般实现问题，再由 Sol 分析失败测试。这个序列仅用于说明路由粒度，不代表实测效果。
 
+## 核心闭环
+
+```mermaid
+flowchart TD
+    A["同一 Codex 会话：下一次模型调用"] --> B["本地 Responses 代理"]
+    B --> C{"这次调用可参与路由？"}
+    C -- "停用或固定档位" --> H["原模型或固定档位"]
+    C -- "隐私限制" --> G["Terra 基线；记录原因"]
+    C -- "可以" --> D["宿主可请求的模型与推理档位组合"]
+    D --> E["Jev：一次 Choice"]
+    E -- "有效选择" --> F["选中的模型与档位"]
+    E -- "失败或低置信" --> G["Terra 基线；记录原因"]
+    H --> I["原生转发；记录实际模型与用量"]
+    F --> I
+    G --> I
+    I --> J["响应回到同一会话"]
+    J -- "下一次调用" --> A
+    J -- "任务结束" --> K["固定档位的独立验收"]
+    K -- "未通过：有界纠错" --> A
+    K -- "通过" --> L["Router Compass：质量与开销"]
+    I -. "调用事实" .-> L
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/your-group/codex-auto-router.git
-git branch -M main
-git push -uf origin main
+
+### Jev 做什么
+
+- 代理只构建宿主当前**确实可请求**的 `(模型, reasoning effort)` 组合。Jev 对这些组合做**一次 Choice**，同时决定模型和推理档位；本地代码不再添加任务类型表或第二个语义选路器。
+- 发给 Jev 的是经过发送资格检查的紧凑状态，例如当前步骤、工具错误摘要和当前模型。完整会话仍走 Codex 原生模型调用；原始 prompt 和工具输出默认不写入路由日志。
+- 生产路由使用经过验证的 Jev 固定版本；`jev-latest` 用于 shadow 对比。超时、低置信或无效回答会明确回退到默认 `Terra/medium`，并留下原因。关闭路由时恢复宿主原本指定的模型。
+
+### 四个能力档位
+
+| 档位 | 典型职责 | 普通调用 |
+| --- | --- | --- |
+| **Luna Max** | 明确、机械的后续步骤 | 可选 |
+| **Terra** | 日常实现与故障回退基线 | 可选 |
+| **Sol** | 较难的推理、实现与纠错 | 可选 |
+| **GPT-6** | 有证据支持的稀缺升级 | 默认不可选 |
+
+GPT-6 仅在已验证的推理阻塞提供临时资格时进入候选集；用户明确要求 GPT-6 时，该要求作为硬约束执行。当前方案中的 Luna Max 指 `gpt-5.6-luna/max`；档位名称最终以宿主实际支持的模型与 effort 组合为准，不能靠名称假定模型可用。
+
+## 路由正确，还不等于任务完成
+
+任务边界有独立验收：对照原始需求检查改动、测试、运行结果和必要的语义结论；执行模型自报成功不算证据。验收失败时，把具体失败事实送回同一会话纠错；默认最多两轮，之后由 Root 接管。验收本身使用固定档位，不参与节省型路由。
+
+Router Compass 记录每次调用的 Jev 选择、实际模型与档位、用量、缓存、延迟和回退原因，再关联任务的验收结果。未知用量保持 `UNKNOWN`，不能当成零。模型切换可能损失 prompt cache，因此 V1 先测量切换的真实代价，不声称路由天然省钱。
+
+| 证据 | 可以回答的问题 |
+| --- | --- |
+| 生产观察 | 实际用了哪些模型、花了多少、任务是否通过验收 |
+| 历史回放 | 在明确假设下，**估算**其他路线可能的价格；属于反事实，不证明质量 |
+| 固定 Terra 对照 | 在同等验收、完整计入 Jev 与纠错开销后，是否真的节省并保持质量 |
+
+## 当前进度与体验
+
+当前仓库提供本地代理、路由决策、任务验收和 Compass 数据结构的原型及测试。**上线前的 P0 门槛**是用真实 Codex CLI 和四档模型完成同一工具循环中的 A→B→A 切换，核对认证、实际模型与 effort、工具调用 ID、流式事件、取消、延续和上下文压缩。通过这项验证和受控对照前，项目不宣称普遍节省，也不提供“安装后即可自动路由”的承诺。
+
+仓库里的旧版插件 Skill 与封面仍反映 TaskUnit/worker 架构；逐调用 V1 以 [ADR 0017](docs/adr/0017-per-call-responses-routing.md) 和[架构方案](docs/solution.md)为准。
+
+### 本地开发
+
+需要 Node.js 22+。以下命令验证当前代码，不会建立 Codex 的生产代理连接：
+
+```sh
+npm ci
+npm test
+npm run typecheck
 ```
 
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.com/your-group/codex-auto-router/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+`npm test` 会先构建再运行测试；本地代理入口见 [src/index.ts](src/index.ts)。
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+[Apache License 2.0](LICENSE)
