@@ -17,6 +17,7 @@ import {
 import { validateActiveEvidence } from "./active-evidence.js";
 import { looksSensitive, QUESTION_SCHEMA_VERSION } from "./route-plan.js";
 import { AUTO_MODEL, parseStepType } from "./types.js";
+import { parseInstallBriefInput, renderInstallBrief, renderInstallPage } from "./install-brief.js";
 import type { VerificationEvidence } from "./verification.js";
 import { POLICY_VERSION } from "./receipt.js";
 
@@ -314,6 +315,21 @@ export function createRouterServer(
         writeJson(res, 200, { calls: proxy.telemetry.calls, tasks: proxy.telemetry.tasks });
         return;
       }
+      if (req.method === "GET" && url.pathname === "/install") {
+        writeText(res, 200, "text/html; charset=utf-8", renderInstallPage(process.cwd()));
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/install/brief") {
+        const params: Record<string, string | undefined> = {};
+        for (const [key, value] of url.searchParams.entries()) params[key] = value;
+        try {
+          const input = parseInstallBriefInput(params, process.cwd());
+          writeText(res, 200, "text/markdown; charset=utf-8", renderInstallBrief(input));
+        } catch (error) {
+          writeJson(res, 400, { error: error instanceof Error ? error.message : "invalid input" });
+        }
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/v1/responses") {
         // Control signals travel as headers so the forwarded body stays native.
         const taskId = parseTaskIdHeader(req.headers["x-jev-task-id"]);
@@ -420,6 +436,11 @@ function parseBooleanHeader(value: string | undefined): boolean | undefined {
 function writeJson(res: import("node:http").ServerResponse, status: number, payload: unknown): void {
   const body = JSON.stringify(payload);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
+  res.end(body);
+}
+
+function writeText(res: import("node:http").ServerResponse, status: number, contentType: string, body: string): void {
+  res.writeHead(status, { "content-type": contentType, "content-length": Buffer.byteLength(body) });
   res.end(body);
 }
 

@@ -198,6 +198,10 @@ pair 证明清单为版本 1 JSON：清单头含 `version`、`id`、`caller_edge
 
 本地代理入口见 [src/index.ts](src/index.ts)。
 
+### 安装简报：把「Jev Auto Router」加进 Codex 模型选择器
+
+代理运行后访问 `http://127.0.0.1:8787/install`（或代理未启动时执行 `npm run install-brief -- --baseline <model>/<effort>`），填写固定回退基线等参数，即可生成一份交给 Codex 执行的安装简报。简报只借用外部接入层（provider / 模型选择器注册，固定 commit），把 `jev/auto` 指向本仓库代理，不安装、不启用其 Jev 决策服务与运行时策略（route lease、Astra 策略、配额回退、retry 均排除）；密钥只进本地 600 权限文件，全部改动按第 7 步可完整回滚。配置页与简报本身不接收任何密钥。
+
 ## License
 
 [Apache License 2.0](LICENSE)
