@@ -7,12 +7,13 @@ import {
   type CallRecord,
   type CallRecordInput,
 } from "../src/receipt.js";
+import type { JevDecision } from "../src/route-plan.js";
 import { UNKNOWN } from "../src/types.js";
 
 const PRICES = {
-  "gpt-5.6-luna": { input: 0.25, output: 1.25 },
-  "gpt-5.6-terra": { input: 1.25, output: 5 },
-  "gpt-5.6-sol": { input: 5, output: 20 },
+  "gpt-6-luna": { input: 0.25, output: 1.25 },
+  "gpt-6-sol": { input: 1.25, output: 5 },
+  "gpt-6-astra": { input: 5, output: 20 },
 };
 
 function call(partial: Partial<CallRecordInput> = {}): CallRecord {
@@ -20,14 +21,17 @@ function call(partial: Partial<CallRecordInput> = {}): CallRecord {
     task_id: "t1",
     call_index: 0,
     step_type: "tool_step",
+    entry: "auto",
     mode: "active",
     eligiblePairs: ["p1"],
-    selectedPair: { model: "gpt-5.6-luna", effort: "max" },
+    proposedPair: { model: "gpt-6-luna", effort: "max" },
+    appliedPair: { model: "gpt-6-luna", effort: "max" },
+    originalModel: "jev/auto",
     route_source: "jev",
     model_latency_ms: 100,
     call_status: "ok",
     observed: {
-      actual_model: "gpt-5.6-luna",
+      actual_model: "gpt-6-luna",
       actual_effort: "max",
       observation: "requested_match",
       usage: {
@@ -45,12 +49,87 @@ function call(partial: Partial<CallRecordInput> = {}): CallRecord {
 test("call record separates Jev selection from fixed fallback and bypass", () => {
   const jev = call({ route_source: "jev", mode: "active" });
   assert.equal(jev.route_source, "jev");
-  assert.equal(jev.fallback_reason, undefined);
-  const fallback = call({ route_source: "fallback", fallback_reason: "low_confidence", selectedPair: { model: "gpt-5.6-terra", effort: "medium" } });
+  assert.equal(jev.reason, undefined);
+  const fallback = call({ route_source: "fallback", reason: "low_confidence", appliedPair: { model: "gpt-6-sol", effort: "medium" } });
   assert.equal(fallback.route_source, "fallback");
-  assert.equal(fallback.fallback_reason, "low_confidence");
-  const bypass = call({ route_source: "bypass", mode: "bypass", fallback_reason: "privacy_refusal" });
+  assert.equal(fallback.reason, "low_confidence");
+  const bypass = call({ entry: "manual", route_source: "bypass", mode: "bypass", reason: "manual_model" });
   assert.equal(bypass.route_source, "bypass");
+  assert.equal(bypass.entry, "manual");
+});
+
+test("proposed, applied and observed stay independent; nothing backfills", () => {
+  const record = call({
+    proposedPair: { model: "gpt-6-luna", effort: "max" },
+    appliedPair: { model: "gpt-6-sol", effort: "medium" },
+    observed: undefined,
+  });
+  assert.equal(record.proposed_model, "gpt-6-luna");
+  assert.equal(record.applied_model, "gpt-6-sol");
+  assert.equal(record.observed_model, UNKNOWN);
+  assert.equal(record.observed_effort, UNKNOWN);
+  assert.equal(record.observation, "pending");
+  assert.equal(record.model_input_tokens, UNKNOWN);
+});
+
+test("a cancelled call without an upstream request keeps applied UNKNOWN", () => {
+  const record = call({
+    proposedPair: undefined,
+    appliedPair: undefined,
+    observed: undefined,
+    route_source: "fallback",
+    call_status: "cancelled",
+  });
+  assert.equal(record.applied_model, UNKNOWN);
+  assert.equal(record.observed_model, UNKNOWN);
+  assert.equal(record.jev_choice_result, undefined);
+  assert.equal(record.jev_failure_subreason, undefined);
+});
+
+test("Choice outcome and failure subreason are bounded and independent of route reason", () => {
+  const decision: JevDecision = {
+    decision_id: "d1",
+    candidate_set_digest: "c1",
+    jev_requested_version: "jev-1.13.0",
+    jev_resolved_version: "UNKNOWN",
+    question_schema_version: "choice-pairs/2",
+    valid: false,
+    failure_reason: "transport",
+    failure_subreason: "credential=secret-from-error",
+    jev_latency_ms: 5,
+    jev_usage: { input_tokens: UNKNOWN, output_tokens: UNKNOWN },
+  };
+  const record = call({ decision, route_source: "fallback", reason: "shadow_mode" });
+  assert.equal(record.reason, "shadow_mode");
+  assert.equal(record.jev_choice_result, "jev_failure");
+  assert.equal(record.jev_failure_subreason, "other");
+  assert.ok(!JSON.stringify(record).includes("secret-from-error"));
+});
+
+test("an alias Choice remains diagnostic and is not recorded as version-qualified", () => {
+  const decision: JevDecision = {
+    decision_id: "d2",
+    candidate_set_digest: "c1",
+    jev_requested_version: "jev-latest",
+    jev_resolved_version: "jev-1.14.0",
+    question_schema_version: "choice-pairs/2",
+    chosen_pair_id: "p1",
+    confidence: 0.9,
+    valid: true,
+    jev_latency_ms: 5,
+    jev_usage: { input_tokens: 1, output_tokens: 1 },
+  };
+  const record = call({
+    decision,
+    route_source: "fallback",
+    reason: "shadow_mode",
+    guardVerdict: "deny",
+    guardReason: "VERSION_DRIFT",
+  });
+  assert.equal(record.jev_choice_result, "jev_version_mismatch");
+  assert.equal(record.jev_failure_subreason, "version_unpinned");
+  assert.equal(record.guard_verdict, "deny");
+  assert.equal(record.guard_reason, "VERSION_DRIFT");
 });
 
 test("UNKNOWN usage is never coerced to zero anywhere in the aggregates", () => {
@@ -59,7 +138,8 @@ test("UNKNOWN usage is never coerced to zero anywhere in the aggregates", () => 
     call({ task_id: "t1", call_index: 1, model_latency_ms: 200, observed: undefined }),
     call({
       task_id: "t1", call_index: 2, model_latency_ms: 50,
-      selectedPair: { model: "gpt-6-astra", effort: "high" },
+      proposedPair: { model: "gpt-6-astra", effort: "high" },
+      appliedPair: { model: "gpt-6-astra", effort: "high" },
       route_source: "jev",
       observed: {
         actual_model: "gpt-6-astra",
@@ -98,16 +178,21 @@ test("observed costs aggregate honestly when usage exists", () => {
   assert.equal(metrics.actual_model_switches_per_task, 0);
 });
 
-test("switches, takeover and cache diagnostics derive from records", () => {
+test("switches, takeover and cache diagnostics derive from observed records only", () => {
   const records = [
     call({ task_id: "t2", call_index: 0, route_source: "jev" }),
-    call({ task_id: "t2", call_index: 1, route_source: "fallback", selectedPair: { model: "gpt-5.6-terra", effort: "medium" },
+    call({
+      task_id: "t2", call_index: 1, route_source: "fallback", reason: "low_confidence",
+      proposedPair: { model: "gpt-6-luna", effort: "max" },
+      appliedPair: { model: "gpt-6-sol", effort: "medium" },
       observed: {
-        actual_model: "gpt-5.6-terra",
+        actual_model: "gpt-6-sol",
         actual_effort: "medium",
         observation: "requested_match",
         usage: { input_tokens: 2000, cached_input_tokens: 1000, cache_write_input_tokens: 0, output_tokens: 100, reasoning_tokens: 0 },
-      } }),
+      },
+    }),
+    call({ task_id: "t2", call_index: 2, observed: undefined, appliedPair: { model: "gpt-6-sol", effort: "medium" } }),
   ];
   const tasks = [
     { task_id: "t2", verification: "PASS" as const, evidence_refs: [], first_pass: false, correction_cycles: 1, root_takeover: true, critical_failure: true },
@@ -116,9 +201,9 @@ test("switches, takeover and cache diagnostics derive from records", () => {
   assert.equal(metrics.actual_model_switches_per_task, 1);
   assert.equal(metrics.root_takeover_rate, 1);
   assert.equal(metrics.critical_failure_rate, 1);
-  assert.deepEqual(diagnostics.tier_call_share, { luna_max: 1, terra: 1 });
+  assert.deepEqual(diagnostics.tier_call_share, { luna_max: 1, sol: 1, unknown: 1 });
   assert.deepEqual(diagnostics.correction_cycles, [1]);
-  assert.equal(diagnostics.gpt6_usage_rate, 0);
+  assert.equal(diagnostics.astra_usage_rate, 0);
 });
 
 test("empty population yields UNKNOWN rates, never zeros claimed as measurements", () => {

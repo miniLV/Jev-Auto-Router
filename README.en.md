@@ -5,7 +5,11 @@
 In the architecture, Jev chooses the model and reasoning effort for each call. A local Responses proxy preserves the Codex session and tool loop. Independent verification checks the finished task. Router Compass connects the route, actual usage, and acceptance result to answer one question: **Did using less frontier capacity still complete the task correctly and reduce the full delivery cost?**
 
 > [!IMPORTANT]
-> **Status: architecture approved; runtime is a validation prototype.** This repository has a per-call proxy and tests, but cross-model switching in a real Codex tool loop, the complete verification path, and savings have not been proven end to end. The design below is not a production installation guide.
+> **Status: the Scheme A contract is approved; runtime migration is pending.**
+> A real Codex A→B→A summary supports cross-model continuation,
+> authentication, tool-result ID continuity, and HTTP streaming before
+> completion. Effort fidelity, cancellation, compaction, version capture, and
+> repeatability remain open. This is not a production installation guide.
 
 [简体中文](README.md) · [Architecture](docs/solution.md) · [Decision ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [Chinese article](https://minilv.github.io/2026/09/18/codex-auto-router/) · [License](LICENSE)
 
@@ -13,7 +17,8 @@ In the architecture, Jev chooses the model and reasoning effort for each call. A
 
 - **A TypeSafe account and Jev API key.** Get a key through the [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart). This proxy reads `JEV_API_KEY` when it calls Jev. TypeSafe's own examples use `TYPESAFE_API_KEY`; both variables can hold the same key. Never commit the key.
 - **Node.js 22+, a signed-in Codex CLI, and access to the model and reasoning-effort pairs you want to route.** A Jev key alone does not make live per-call routing available.
-- **This is still a validation prototype.** Cross-model switching inside a real Codex tool loop must pass the P0 proof below; there is no production-ready install-and-run path yet.
+- **This is still a validation prototype.** The existing report must become
+  repeatable evidence, and later tickets must migrate the runtime to Scheme A.
 
 Before running the local proxy, set the key from your TypeSafe dashboard in the current shell:
 
@@ -29,42 +34,44 @@ Jev Auto Router makes a choice at **each meaningful model call** inside the same
 
 ## The delivery loop
 
-![Jev Auto Router per-call architecture: a Codex session passes through the local proxy, Jev, execution guard, and native Responses before independent task verification](docs/assets/jev-auto-router-sketchboard-en.png)
+[Scheme A visual technical design](tech-design.html)
 
 ```text
-Codex Responses call
+Codex Responses(model=jev/auto)
    |
    v
-local proxy -- OFF? -> host model - infrastructure/verification -> fixed tier - privacy fails -> skip Jev
+Codex Router -- real-model request -> normal path (Jev bypassed)
    |
    v
-compact routing state + (model, effort) pairs the host can request now
+local Jev Router -- OFF / privacy refusal / insufficient facts -> fixed Fallback Baseline
    |
    v
-Jev: one Choice (pinned in production) --timeout/low-confidence/bad answer--> Terra/medium baseline (reason recorded)
+allowlisted Routing State + Candidate Pairs proved on the caller edge
    |
    v
-native Responses forwarding (events unchanged); record actual model + usage
-   |
-   +-task end-> independent verification PASS / FAIL -- failure facts return to the same session; Root takeover after two cycles
+pinned Jev: one Choice -> Guard -> Apply model + reasoning.effort only
+   |                      failure/Shadow -> same fixed Fallback Baseline
+   v
+authenticated non-recursive caller edge -> native SSE / JSON returned immediately
 ```
 
 ### What Jev does
 
-- The proxy builds only `(model, reasoning effort)` pairs that the host can actually request. Jev makes **one Choice** over those pairs, selecting model and effort together. Local code adds no task-kind table or second semantic router.
+- The router builds only exact `(model, reasoning effort)` pairs proved
+  requestable through the current authenticated caller edge. Jev makes one
+  Choice; local code adds no task-kind table or second semantic router.
 - Jev receives compact state that passes an explicit send check, such as the current step, a bounded tool-error summary, and the current model. The full session still goes through the native Codex model call; raw prompts and tool output are not stored in route logs by default.
-- Production routing pins a validated Jev version; `jev-latest` is evaluated in shadow. Timeout, low confidence, or an invalid answer falls back explicitly to `Terra/medium` by default, with a recorded reason. Turning the router off restores the host's original model.
+- Production routing pins a validated Jev version. OFF, privacy refusal,
+  insufficient facts, timeout, low confidence, and invalid answers all use the
+  same proved fixed baseline with distinct reasons. There is no product-wide
+  `Terra/medium` default. A user-selected real model always bypasses Jev.
 
-### Four capability tiers
+### Candidate Pairs
 
-| Tier | Typical role | Ordinary calls |
-| --- | --- | --- |
-| **Luna Max** | Explicit, mechanical follow-up steps | Eligible |
-| **Terra** | Everyday work and the fallback baseline | Eligible |
-| **Sol** | Harder reasoning, implementation, and correction | Eligible |
-| **GPT-6** | Scarce escalation supported by evidence | Ineligible by default |
-
-GPT-6 enters the candidate set only with temporary eligibility from a verified reasoning blocker. An explicit user mandate for GPT-6 is enforced as a hard constraint. Luna Max means `gpt-5.6-luna/max` in the current design; tier names must match model and effort pairs that the host actually supports.
+Candidates are exact `(model, reasoning_effort)` pairs, not brand tiers. A
+pair enters the Choice only after the current caller edge has requested it
+successfully and it satisfies capability and user hard constraints. Catalog or
+model-picker visibility is not execution evidence.
 
 ## What data goes where
 
@@ -74,7 +81,10 @@ GPT-6 enters the candidate set only with temporary eligibility from a verified r
 
 ## A good route does not prove completion
 
-At the task boundary, independent verification checks the original request against the diff, tests, run results, and any needed semantic judgment. The executing model's claim of success is not evidence. Specific failures return to the same session for correction; after two cycles by default, Root takes over. Verification uses a fixed tier outside the economic routing loop.
+At the task boundary, the original request is checked against the diff, tests,
+run results, and any needed semantic judgment. The executing model's claim of
+success is not evidence. Route proposals and final delivery are evaluated
+separately.
 
 Router Compass records Jev's choice, the actual model and effort, usage, cache behavior, latency, and fallback reason for each call, then links those facts to the task's verification result. Unknown usage stays `UNKNOWN`, never zero. Switching models can lose prompt-cache reuse, so V1 measures the full cost instead of assuming routing saves money.
 
@@ -82,11 +92,15 @@ Router Compass records Jev's choice, the actual model and effort, usage, cache b
 | --- | --- |
 | Production observation | Actual model mix, usage, and task verification |
 | Historical replay | **Estimated** prices under explicit assumptions; a counterfactual, not quality proof |
-| Fixed-Terra control | Whether equivalent acceptance and complete Jev/correction accounting show real savings with maintained quality |
+| Fixed Fallback Baseline control | Whether equivalent acceptance and complete Jev/cache/failure/verification accounting show real savings with maintained quality |
 
 ## Current status
 
-The repository contains a prototype local proxy, routing decisions, task verification, Compass data structures, and tests. The **P0 gate** is a real Codex CLI A→B→A switch within one tool loop across all four tiers, checking authentication, actual model and effort, tool-call IDs, streaming events, cancellation, continuation, and compaction. Until that proof and a controlled comparison pass, this project makes no general savings claim and offers no promise of automatic routing after installation.
+The repository still contains the earlier proxy implementation and tests.
+Scheme A's documentation contract is migrated; ordered local tickets now cover
+the fixed-baseline path, Shadow, Active, failures/cancellation, repeatable live
+evidence, and paired evaluation. Until they pass, this project makes no general
+savings or production-readiness claim.
 
 [skills/jev-auto-router/SKILL.md](skills/jev-auto-router/SKILL.md) is the install-and-operate guide; the Skill itself never intercepts model calls — routing happens inside the local proxy.
 
@@ -97,28 +111,39 @@ Requires Node.js 22+. These commands start the local proxy and validate the curr
 ```sh
 npm ci
 npm run build
-JEV_API_KEY="<your-key>" npm start     # http://127.0.0.1:8787
+JEV_API_KEY="<your-key>" \
+# Replace with a pair you have successfully requested through this caller edge.
+JEV_BASELINE="<verified-model>/<verified-effort>" \
+JEV_UPSTREAM_BASE_URL="<authenticated-caller-edge-url>" npm start
 curl -s localhost:8787/health          # router status, baseline, model catalog
 npm test                               # builds, then runs the full suite
 npm run typecheck
 ```
 
-Once Codex's Responses traffic points at the local proxy, each call returns its route tag through the `x-jev-route` / `x-jev-route-source` response headers; `GET /decisions` shows call and task records. Control signals (task id, step type, forced model) travel as `x-jev-*` request headers and never enter the forwarded body.
+Once Codex's Responses traffic points at the local proxy, each call returns its route tag through the `x-jev-route` / `x-jev-route-source` response headers; `GET /decisions` shows call and task records, including upstream status, SSE first-output/completion timing, and digested tool references. Records omit prompts and tool text. Control signals (task id, step type, forced model) travel as `x-jev-*` request headers and never enter the forwarded body.
 
 ### Configuration
 
 | Environment variable | Effect | Default |
 | --- | --- | --- |
 | `JEV_API_KEY` | TypeSafe Jev API key | required when routing is enabled |
-| `JEV_ROUTER_OFF` | `1` = kill switch: bypass Jev, restore the host model | unset |
-| `JEV_MODE` | `active` \| `shadow` (shadow logs would-be routes, executes the baseline) | `active` |
+| `JEV_ROUTER_OFF` | `1` = OFF: do not call Jev; use the fixed baseline for `jev/auto` | unset |
+| `JEV_MODE` | `active` \| `shadow` (shadow logs would-be routes, executes the baseline) | `shadow` |
+| `JEV_ACTIVE_CANDIDATES` | Exact `<model>/<effort>` candidate allowlist; when set it also scopes Shadow choices, and Active refuses to start without it | required explicitly for Active |
+| `JEV_ACTIVE_EVIDENCE_FILE` | Paired-evaluation JSON report from `bench:evaluate`; Active checks its gates and runtime bindings | required explicitly for Active |
+| `JEV_PAIR_PROOFS_FILE` | Reviewed caller-edge proof manifest for exact model/effort request success; startup does not probe models | unset means no pair is proved |
+| `JEV_RELEASE_ID` | Runtime release ID matching the paired-evaluation report | required explicitly for Active |
 | `JEV_VERSION` | Pinned production Jev version | `jev-1.13.0` |
-| `JEV_BASELINE` | Failure fallback pair | `gpt-5.6-terra/medium` |
+| `JEV_BASELINE` | Fixed fallback pair successfully requested through the current caller edge | required explicitly; no universal default |
 | `JEV_CONFIDENCE_FLOOR` | Confidence floor below which calls fall back | `0.55` |
 | `JEV_DEADLINE_MS` | Hot-path Jev deadline (tuned from shadow latency) | `2000` |
 | `JEV_PORT` | Local proxy port | `8787` |
-| `JEV_UPSTREAM_BASE_URL` | Upstream Responses base URL | `https://api.openai.com` |
+| `JEV_UPSTREAM_BASE_URL` | Caller-edge URL that performs upstream authentication and does not recurse to this router; the router holds no upstream credentials | required explicitly |
+| `JEV_CALLER_EDGE_ID` | Non-secret caller-edge version/configuration ID shown in `/health` evidence | `UNKNOWN` |
+| `JEV_CANDIDATE_CATALOG_ID` | Optional expected catalog ID; the actual ID is derived from current caller-edge pair proofs and startup rejects a mismatch | unset |
 | `JEV_ENDPOINT` | Jev API endpoint | TypeSafe endpoint |
+
+The version-1 pair-proof JSON has a manifest header with `version`, `id`, `caller_edge_id` and `proofs`. Each entry records the exact `model`/`effort`, caller-edge ID, request and expiry times, HTTP and Responses results, observed model/effort, and a redacted evidence artifact ID, SHA-256 digest and fixed-enum summary. Only a successful, completed, unexpired request through the current edge with an exact observed-model match enters the Candidate Pairs; `observed_effort: "UNKNOWN"` stays an explicit observation gap. Request bodies, prompts, tool output and credentials are rejected. Startup reads `/models` and the manifest first, derives the catalog ID from the edge, canonical set of valid pairs and each pair's proof version, then validates the Active report. Model/proof ordering, session names and startup time do not enter the ID. Startup never sends paid probes. Automatic requests fail before the upstream call when the baseline lacks proof, and Active startup rejects any unproved configured candidate. Real proof assets require human review; this repository ships no fabricated sample.
 
 The local proxy entry point is [src/index.ts](src/index.ts).
 

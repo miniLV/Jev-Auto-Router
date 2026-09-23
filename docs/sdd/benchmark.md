@@ -1,46 +1,64 @@
-# Benchmark and savings evidence
+# Paired benchmark and savings evidence
 
-The benchmark qualifies the whole routing policy against a fixed-Terra
-baseline. Model-share observations and re-pricings do not establish
-savings.
+The authoritative comparison is a preregistered, paired Main Task evaluation
+of the configured Fallback Baseline and Active routing. Model shares and
+historical repricing are not savings evidence.
 
 ## Evidence levels
 
 | Level | Basis | May claim |
 | --- | --- | --- |
-| Production observed | Compass records from active/shadow runs | Actual model shares, usage, cache behavior, Jev overhead, verification pass rate, observed task cost. **Not** "routing saved X%" — no same-task counterfactual exists |
-| Historical replay | Offline script re-pricing real session token traces under hypothetical routes | Estimates labeled `ESTIMATED/COUNTERFACTUAL`, under a stated price table. Not that cheaper models produce the same tokens, tool paths, cache hits or quality |
-| Controlled benchmark | Fixed-Terra comparison on a defined task group | Quality-neutral cost differences with intervals and failure stratification, within the tested population only |
+| Production observed | Runtime call/task records | Actual route, usage, cache, latency and observed task outcomes; not causal savings |
+| Historical replay | Existing token traces repriced under a hypothetical route | `ESTIMATED/COUNTERFACTUAL` price potential only |
+| Controlled paired evaluation | Same frozen task, repository snapshot, input and acceptance in both arms | Quality and complete-cost results for the tested workload; no extrapolation beyond it |
 
-Historical replay is a small offline research script — the fastest
-price-potential screen. It is never a runtime dependency and never a launch
-proof: its estimates assume identical token traces and cache behavior under
-the hypothetical route, which is exactly why they cannot support product
-claims.
+## Preregistered comparison
 
-## Controlled comparison design
+Before either arm runs, commit a bundle that freezes the repository revision,
+per-task snapshot/input/acceptance digests, independent review protocol, quality
+floor and non-inferiority limits, rework/takeover limits, cost target, cache
+conditions, randomized arm order, currency and price source. Bind it to the
+exact Fallback Baseline, Candidate Pairs, caller-edge/catalog IDs, Jev version,
+question schema and policy version. Each run records its start time and opaque
+`kind:sha256:<hex>` references to independent evidence from its diff, tests and artifacts. The
+evaluator rejects runs started before freeze, incorrect arm order, duplicate or
+unpaired tasks, altered acceptance conditions, changed snapshots and
+unconfigured pairs.
 
-- **Arms:** fixed `Terra/medium` baseline vs the full routing policy. Pair
-  repository snapshots, user intents and acceptance standards; randomize
-  execution order; declare cold/warm cache conditions per run.
-- **Complete cost accounting in both arms:** every model call (input,
-  cached, cache-write, output, reasoning tokens), Jev calls, verification,
-  failures, correction cycles, Root takeover and rework. Switch counts and
-  cache-hit rates recorded per task.
-- **Quality first:** completion and independent verification PASS under
-  equivalent acceptance; only then compare weighted cost and frontier
-  tokens. A cheaper arm with worse completion is a loss, not a saving.
-- **UNKNOWN discipline:** unobserved usage is never coerced to zero
-  (the retired harness's UNKNOWN→zero conversion was a defect, and its
-  passing tests are not economic evidence). Missing usage is conservatively
-  bounded or disqualifies the run from savings attribution.
-- Report uncertainty, losing strata and failure stratification; no
-  extrapolation to untested workloads or to subscription-credit savings.
+Each physical Model Call is recorded separately. This includes every upstream
+call, Jev Choice, retry, correction and verification call. The report includes
+completion and acceptance rates, independent quality, rework, Root takeover,
+end-to-end latency and full cost. Cost adds the measured caller-edge charge
+and prices input, cached input, cache-write input and output tokens separately;
+reasoning tokens are reported as a subset of output and are not double charged.
+An unknown bucket, rate or edge charge makes full cost `UNKNOWN`, never zero.
 
-## What the benchmark may change
+Each exact Candidate Pair receives its own pair-locked comparison and a decision
+bound to the same edge, catalog, Jev version, question schema, policy and price
+release. Active eligibility requires transport, cancellation, Shadow, quality
+and cost gates all to pass. Missing or mismatched evidence stays `UNKNOWN` and
+blocks the pair. The report provides separate baseline, Shadow and Active
+completion, acceptance, quality, rework, takeover, latency and full-cost metrics
+for each pair. Transport, cancellation and Shadow PASS gates must reference
+sanitized review artifacts by content digest; an unreferenced PASS stays
+`UNKNOWN`. The aggregate Active result cannot promote a candidate whose
+individual decision is blocked.
 
-If the controlled comparison shows switching worsens total cost or
-completion (e.g. long contexts alternating Terra↔Luna where cache writes
-exceed output savings), the response is a **new policy version** trialing a
-minimal switch threshold — validated by the same ladder — never a silent
-runtime patch.
+## Interpreting results
+
+Quality is evaluated before savings: lower completion, acceptance or quality,
+excess rework or takeovers fail the frozen quality gate even if cost is lower.
+The report still shows measured costs for a losing policy, but it will not mark
+a savings claim eligible. Report sample size and losing strata with the
+evidence; do not convert model mix or unknown usage into a quality or cost
+claim.
+
+For an eligible release, set `JEV_MODE=active`, point
+`JEV_ACTIVE_EVIDENCE_FILE` at the saved report, set
+`JEV_RELEASE_ID` to its release binding, and configure only candidate pairs
+listed as Active-eligible. Startup verifies the report's candidate decisions,
+baseline, caller-edge/catalog, Jev, policy and question-schema bindings.
+Set `JEV_MODE=shadow` and restart to observe choices while executing the fixed baseline. Set
+`JEV_ROUTER_OFF=1` and restart to use only the fixed baseline. These existing
+configuration changes are the complete enable and rollback path; no deployment
+control system is added.

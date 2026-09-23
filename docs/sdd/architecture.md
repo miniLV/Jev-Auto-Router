@@ -1,5 +1,8 @@
 # Architecture
 
+> Legacy prototype design; superseded by [Scheme A](../solution.md). It is not
+> a runtime contract.
+
 Five runtime modules, one selection authority: **Jev chooses; the Guard
 validates; Codex executes; independent verification proves.** The unit of
 routing is the model call inside one live Codex session.
@@ -9,7 +12,7 @@ routing is the model call inside one live Codex session.
 | Module | Interface | Responsibility hidden behind it |
 | --- | --- | --- |
 | proxy | Codex Responses request → routed native response | OFF/infra/privacy gates, route application, unchanged streaming events, usage capture |
-| routing | RoutingState + candidates → RouteDecision | Compact state construction, candidate pairs, GPT-6 gate, one Jev Choice, fixed fallback |
+| routing | RoutingState + candidates → RouteDecision | Compact state construction, candidate pairs, Astra gate, one Jev Choice, fixed fallback |
 | verification | Completed task → PASS/FAIL + evidence refs | Acceptance reading, independent checks, fixed verification tier, correction-cycle counting |
 | telemetry | Records → local log + Compass aggregates | Private persistence, UNKNOWN discipline, bounded metrics |
 | entry | Environment → running proxy | Startup, host model discovery, configuration |
@@ -38,7 +41,7 @@ UNVERIFIED until this gate passes.
    configured baseline, `route_source = bypass`.
 5. Build compact routing state and validated `(model, effort)` candidate
    pairs from trusted discovery; apply hard constraints (forced model,
-   GPT-6 gate).
+   Astra gate).
 6. One Jev Choice over the pairs, under the pinned version and hot-path
    deadline. Timeout/malformed/low-confidence/transport failure → the
    configured baseline with recorded reason; a transport failure skips Jev
@@ -53,7 +56,7 @@ UNVERIFIED until this gate passes.
     (`correction` next call); at most 2 correction cycles, then Root
     takeover. Immediate takeover on repeated defect, scope runaway,
     permission problems, unclear identity, or Jev persistently avoiding a
-    necessary GPT-6 call.
+    necessary Astra call.
 
 ## Observation
 
@@ -67,8 +70,8 @@ history is a routing input.
 ## Failure posture
 
 Routing failure degrades to the explicit baseline, never escalates to
-GPT-6, never switches external provider silently, and never crashes the
+Astra, never switches external provider silently, and never crashes the
 user's task. The kill switch restores the host's originally specified model
-without downgrading user-chosen Sol/GPT-6. Closed routing never means
+without downgrading user-chosen Sol/Astra. Closed routing never means
 abandoned work: the session continues on the baseline and verification
 still gates completion.

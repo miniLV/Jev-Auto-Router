@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Jev × Codex · 逐调用模型路由技术设计</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #20272a;
+      --muted: #5e6968;
+      --grid: rgba(32, 39, 42, .055);
+      --orange: #cb6135;
+      --orange-soft: #ffe3d1;
+      --yellow: #c99e26;
+      --yellow-soft: #fff0b9;
+      --green: #3e8959;
+      --green-soft: #def0dc;
+      --blue: #4268bd;
+      --blue-soft: #e1e9ff;
+      --teal: #24858a;
+      --teal-soft: #d8f1ef;
+      --pink: #bd557e;
+      --pink-soft: #fbe0e9;
+      --white: #fffcf4;
+      --shadow: rgba(32, 39, 42, .10);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 32px 32px;
+      font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.55;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    a:hover { color: var(--orange); }
+    code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    code { font-size: .92em; }
+    :focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+
+    .shell { width: min(1260px, calc(100% - 48px)); margin: 0 auto; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(248, 245, 236, .94);
+      border-bottom: 2px solid rgba(32, 39, 42, .15);
+      backdrop-filter: blur(12px);
+    }
+    .topbar .shell { min-height: 62px; display: flex; align-items: center; gap: 26px; }
+    .brand { font-weight: 900; letter-spacing: -.03em; white-space: nowrap; }
+    .brand b { color: var(--orange); }
+    nav { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; font-weight: 800; }
+    nav a { color: var(--ink); text-decoration: none; }
+    nav a:hover { color: var(--orange); }
+    .top-status { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    header.hero { padding: 72px 0 50px; }
+    .eyebrow { color: var(--orange); font-size: 13px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { max-width: 960px; margin: 12px 0 17px; font-size: clamp(38px, 5vw, 66px); line-height: 1.08; letter-spacing: -.045em; }
+    .lead { max-width: 980px; margin: 0; color: #40504f; font-size: clamp(17px, 2vw, 21px); line-height: 1.65; }
+    .pills { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 26px; }
+    .pill { border: 2px solid var(--ink); border-radius: 100px; background: var(--white); padding: 7px 13px; font-size: 13px; font-weight: 850; box-shadow: 4px 4px 0 var(--shadow); }
+    .pill.orange { background: var(--orange-soft); border-color: var(--orange); }
+    .pill.blue { background: var(--blue-soft); border-color: var(--blue); }
+    .pill.green { background: var(--green-soft); border-color: var(--green); }
+    .hero-note { margin-top: 25px; padding: 14px 18px; max-width: 1000px; border-left: 5px solid var(--teal); background: rgba(255, 252, 244, .8); color: #42504e; font-size: 14px; }
+
+    main { padding-bottom: 85px; }
+    section { scroll-margin-top: 84px; margin-bottom: 78px; }
+    .section-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 22px; }
+    .section-head .num { color: var(--orange); font-family: ui-monospace, Menlo, monospace; font-size: 19px; font-weight: 900; }
+    h2 { margin: 0; font-size: clamp(27px, 3vw, 38px); letter-spacing: -.035em; line-height: 1.17; }
+    .section-sub { margin: -8px 0 23px 44px; color: var(--muted); font-size: 15px; }
+    h3 { margin: 0 0 9px; font-size: 19px; line-height: 1.25; }
+    p { margin: 0 0 11px; }
+    .board { border: 3px solid var(--ink); border-radius: 25px 20px 26px 21px; background: rgba(255,252,244,.9); box-shadow: 10px 11px 0 var(--shadow); padding: 28px; }
+    .board-caption { margin-top: 15px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .tiny-label { font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+    .sketch-card { border: 3px solid var(--stroke); border-radius: 18px 15px 20px 16px; background: var(--fill); box-shadow: 6px 7px 0 var(--shadow); padding: 16px 17px; }
+    .sketch-card h3 { margin-bottom: 6px; }
+    .sketch-card p { color: #374440; font-size: 13px; margin: 0; }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+
+    .architecture { display: grid; grid-template-columns: 1fr 25px 1fr 25px 1.35fr 25px 1.08fr 25px 1fr; align-items: stretch; gap: 8px; }
+    .architecture .sketch-card { min-height: 154px; }
+    .architecture .sketch-card:nth-child(1) { transform: rotate(-.7deg); }
+    .architecture .sketch-card:nth-child(3) { transform: rotate(.5deg); }
+    .architecture .sketch-card:nth-child(5) { transform: rotate(-.5deg); }
+    .architecture .sketch-card:nth-child(7) { transform: rotate(.4deg); }
+    .architecture .sketch-card:nth-child(9) { transform: rotate(-.5deg); }
+    .flow-arrow { display: flex; align-items: center; justify-content: center; font-size: 27px; font-weight: 900; color: var(--ink); }
+    .jev-spoke { width: 44%; margin: 28px auto 0; position: relative; }
+    .jev-spoke::before { content: ""; position: absolute; top: -29px; left: 50%; height: 29px; border-left: 3px dashed var(--teal); }
+    .jev-spoke .sketch-card { text-align: center; }
+    .jev-spoke .two-way { position: absolute; top: -26px; left: calc(50% + 8px); color: var(--teal); font-weight: 900; font-size: 16px; }
+    .data-key { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 25px; color: #43504f; font-size: 13px; font-weight: 750; }
+    .data-key span::before { content: ""; display: inline-block; width: 23px; border-top: 3px solid var(--ink); vertical-align: middle; margin-right: 8px; }
+    .data-key .decision::before { border-top-color: var(--teal); border-top-style: dashed; }
+
+    .modules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .module { min-height: 178px; }
+    .module .id { color: var(--stroke); font: 900 12px ui-monospace, Menlo, monospace; letter-spacing: .1em; }
+    .module h3 { margin: 8px 0; }
+    .module .contract { display: block; margin-top: 13px; padding-top: 10px; border-top: 1.5px dashed rgba(32,39,42,.35); font-size: 12px; font-weight: 850; color: #3e4949; }
+
+    .svg-wrap { overflow-x: auto; }
+    svg { display: block; max-width: 100%; height: auto; font-family: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    .seq-svg { min-width: 1050px; }
+    .flow-svg { min-width: 1020px; }
+    .svg-head { font-size: 18px; font-weight: 900; fill: var(--ink); }
+    .svg-sub { font-size: 12px; font-weight: 750; fill: var(--muted); }
+    .svg-msg { font-size: 14px; font-weight: 800; fill: var(--ink); }
+    .svg-small { font-size: 12px; font-weight: 750; fill: #394543; }
+    .svg-note { font-size: 13px; font-weight: 850; fill: var(--teal); }
+    .lane-line { stroke: rgba(32,39,42,.28); stroke-width: 2; stroke-dasharray: 7 7; }
+    .message-line { stroke: var(--ink); stroke-width: 2.5; fill: none; marker-end: url(#seq-arrow); }
+    .return-line { stroke: var(--teal); stroke-width: 2.4; stroke-dasharray: 8 6; fill: none; marker-end: url(#seq-return); }
+
+    .rule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .rule-grid .board { padding: 24px; }
+    .rule-grid ul { margin: 11px 0 0; padding-left: 22px; font-size: 14px; }
+    .rule-grid li { margin: 8px 0; }
+    .rule-grid strong { color: var(--ink); }
+    .apply-grid { display: grid; grid-template-columns: 1fr 75px 1fr; align-items: center; gap: 16px; margin-top: 20px; }
+    .code-card { min-width: 0; border: 2px solid #4b5654; border-radius: 17px; background: #202a2b; color: #ecf4ef; overflow: hidden; }
+    .code-card .code-head { padding: 10px 15px; border-bottom: 1px solid #53605e; color: #b2c8c1; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+    pre { margin: 0; padding: 18px; overflow-x: auto; font-size: 13px; line-height: 1.68; }
+    .apply-arrow { text-align: center; font-size: 42px; color: var(--orange); font-weight: 900; }
+    .contract-note { margin-top: 18px; padding: 13px 16px; border: 2px dashed var(--green); border-radius: 13px; background: var(--green-soft); font-size: 14px; font-weight: 750; }
+
+    .review-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .review-grid .sketch-card { min-height: 178px; }
+    .review-grid p { font-size: 13px; }
+    footer { border-top: 2px solid rgba(32,39,42,.20); padding: 28px 0 42px; color: var(--muted); font-size: 13px; }
+    footer .shell { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+    @media (max-width: 1050px) {
+      .architecture { grid-template-columns: 1fr 26px 1fr; }
+      .architecture .flow-arrow:nth-of-type(4), .architecture .flow-arrow:nth-of-type(6) { display: none; }
+      .architecture .sketch-card { min-height: 132px; }
+      .jev-spoke { width: 75%; }
+      .modules, .review-grid { grid-template-columns: repeat(2, 1fr); }
+      .top-status { display: none; }
+    }
+    @media (max-width: 690px) {
+      .shell { width: min(100% - 28px, 1260px); }
+      .topbar .shell { padding: 11px 0; flex-direction: column; align-items: flex-start; gap: 4px; }
+      nav { gap: 7px 14px; }
+      header.hero { padding: 44px 0 35px; }
+      .section-head { gap: 10px; }
+      .section-sub { margin-left: 0; }
+      .board { padding: 18px; }
+      .architecture { display: flex; flex-direction: column; gap: 11px; }
+      .architecture .flow-arrow { height: 18px; transform: rotate(90deg); }
+      .architecture .flow-arrow:nth-of-type(4), .architecture .flow-arrow:nth-of-type(6) { display: flex; }
+      .jev-spoke { width: 100%; margin-top: 24px; }
+      .modules, .review-grid, .rule-grid { grid-template-columns: 1fr; }
+      .apply-grid { grid-template-columns: 1fr; gap: 6px; }
+      .apply-arrow { transform: rotate(90deg); }
+    }
+    @media print {
+      .topbar { display: none; }
+      body { background: var(--paper); }
+      section { break-inside: avoid; }
+      .board, .sketch-card { box-shadow: none; }
+      .shell { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="shell">
+      <div class="brand"><b>Jev × Codex</b> / TECH DESIGN</div>
+      <nav aria-label="页面导航">
+        <a href="#topology">系统拓扑</a>
+        <a href="#modules">模块职责</a>
+        <a href="#interaction">交互时序</a>
+        <a href="#business">业务流程</a>
+        <a href="#route-apply">路由与应用</a>
+        <a href="#review">Review 点</a>
+      </nav>
+      <span class="top-status">设计草案 · 2026-09-23</span>
+    </div>
+  </div>
+
+  <header class="hero shell">
+    <div class="eyebrow">Architecture A · Gist-inspired Responses proxy</div>
+    <h1>Jev 自动切换 Codex 模型<br>逐调用技术设计</h1>
+    <p class="lead">同一个 Codex 任务、同一个工具循环。每次模型调用由 Jev 选择可执行的模型与推理档位；本地路由器负责校验、应用和原样转发 Responses 流。工具执行仍由 Codex 管理。</p>
+    <div class="pills" aria-label="设计状态">
+      <span class="pill orange">方案 A：本地 Responses 路由</span>
+      <span class="pill green">A→B→A：用户报告已通过</span>
+      <span class="pill blue">产物：供 Review 的设计稿</span>
+    </div>
+    <div class="hero-note"><strong>设计前提：</strong>已存在可工作的认证 caller edge，并已在真实 Codex 会话完成跨模型工具循环。本文把该结果作为用户提供的前提；没有在此文档中重新执行或复核测试。此稿提出新架构，不声明现有仓库实现已经符合它。</div>
+  </header>
+
+  <main class="shell">
+    <section id="topology">
+      <div class="section-head"><span class="num">01</span><h2>系统拓扑：一次调用走哪条路</h2></div>
+      <p class="section-sub">主线只处理 Codex 原生 Responses 请求；Jev 是路由决策支线，不接触上游认证凭据。</p>
+      <div class="board">
+        <div class="architecture" aria-label="Codex 到模型的逐调用架构">
+          <article class="sketch-card orange"><div class="tiny-label">HOST</div><h3>Codex CLI</h3><p>保留一个会话与工具循环；请求目标为虚拟模型 <code>jev/auto</code>。</p></article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="sketch-card yellow"><div class="tiny-label">LOCAL ENTRY</div><h3>Codex Router</h3><p>识别 <code>jev/auto</code>，把 Responses 请求交给本地 Jev Router。</p></article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="sketch-card teal"><div class="tiny-label">DECIDE + APPLY</div><h3>Jev Router</h3><p>提取准许发送的事实；构造候选；校验选择；只改 <code>model</code> 与 <code>reasoning.effort</code>。</p></article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="sketch-card blue"><div class="tiny-label">AUTHENTICATED EDGE</div><h3>Caller edge</h3><p>用已经验证的原生认证通道发送真实模型请求；禁止再次路由到 <code>jev/auto</code>。</p></article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="sketch-card green"><div class="tiny-label">EXECUTION</div><h3>GPT 模型</h3><p>实际执行本次调用；SSE 响应沿原路即时返回 Codex。</p></article>
+        </div>
+        <div class="jev-spoke">
+          <span class="two-way" aria-hidden="true">↕</span>
+          <article class="sketch-card pink"><div class="tiny-label">ROUTING INTELLIGENCE</div><h3>TypeSafe Jev</h3><p>接收白名单状态与可用的 <code>(model, effort)</code> 候选；返回一个选择及置信度。不接收完整请求、工具输出或认证凭据。</p></article>
+        </div>
+        <div class="data-key"><span>原生 Responses 请求与 SSE</span><span class="decision">有限路由事实与 Jev 决策</span></div>
+      </div>
+      <p class="board-caption">核心约束：用户内容只通过本地代理到达原本要调用的 GPT 上游；Jev 路径只携带允许发送的结构化事实。虚拟模型入口与认证 caller edge 必须分开，以避免递归转发。</p>
+    </section>
+
+    <section id="modules">
+      <div class="section-head"><span class="num">02</span><h2>六个模块，各自负责什么</h2></div>
+      <p class="section-sub">接口尽量小：决策、实际执行和观测分开，避免第二个隐藏选模器。</p>
+      <div class="modules">
+        <article class="sketch-card orange module"><div class="id">M1 / INGRESS</div><h3>请求接入</h3><p>接收 Codex Router 转来的 Responses 请求；识别当前会话、调用类型、用户指定模型与基础设施调用。保留原始请求供转发。</p><span class="contract">输出：CallContext + 原生请求</span></article>
+        <article class="sketch-card yellow module"><div class="id">M2 / ADMISSION</div><h3>候选与隐私</h3><p>从已验证可请求的模型清单生成候选组合；应用用户硬约束；只提取经白名单批准、足以决策的路由事实。</p><span class="contract">输出：RoutingFacts + CandidatePairs</span></article>
+        <article class="sketch-card pink module"><div class="id">M3 / JEV CLIENT</div><h3>一次 Jev Choice</h3><p>用固定版本、固定问题模板在候选组合中选择一个。只做一次有截止时间的调用；返回 pair ID 与置信度。</p><span class="contract">输出：ProposedPair 或失败原因</span></article>
+        <article class="sketch-card teal module"><div class="id">M4 / GUARD + APPLY</div><h3>校验并应用</h3><p>检查候选成员、当前可用性、用户约束和置信度。决定实际组合后，仅覆盖请求中的模型与 effort。</p><span class="contract">输出：AppliedRequest + RouteSource</span></article>
+        <article class="sketch-card blue module"><div class="id">M5 / RELAY</div><h3>认证与流转发</h3><p>调用已验证的 caller edge；响应字节边到边转发；取消同步传给上游。开始输出后不自动重放。</p><span class="contract">输出：原生 SSE / JSON 响应</span></article>
+        <article class="sketch-card green module"><div class="id">M6 / OBSERVE</div><h3>被动观测</h3><p>记录提议组合、应用组合、上游实际模型、耗时、用量与失败原因；缺失值标为 UNKNOWN，不记录原文。</p><span class="contract">输出：每次调用的审计记录</span></article>
+      </div>
+    </section>
+
+    <section id="interaction">
+      <div class="section-head"><span class="num">03</span><h2>Codex 与 Jev 怎样交互</h2></div>
+      <p class="section-sub">Jev 不成为 Codex 的执行模型。它只在上游模型调用之前，给本地路由器一个受约束的选择。</p>
+      <div class="board svg-wrap">
+        <svg class="seq-svg" viewBox="0 0 1160 630" role="img" aria-labelledby="seq-title seq-desc">
+          <title id="seq-title">Codex、Codex Router、Jev Router、TypeSafe Jev 和模型 caller edge 的时序图</title>
+          <desc id="seq-desc">Codex 发起原生 Responses 调用，经 Codex Router 交给 Jev Router。路由器向 Jev 发路由事实，取得模型组合，再修改请求交给认证 caller edge。响应事件流原路返回，工具之后的新模型调用重新路由。</desc>
+          <defs>
+            <marker id="seq-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#20272a"/></marker>
+            <marker id="seq-return" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#24858a"/></marker>
+          </defs>
+          <rect x="22" y="22" width="1116" height="583" rx="22" fill="#fffcf4" stroke="#c9d0c9" stroke-width="2"/>
+          <rect x="33" y="34" width="154" height="56" rx="14" fill="#ffe3d1" stroke="#cb6135" stroke-width="2.5"/>
+          <rect x="268" y="34" width="154" height="56" rx="14" fill="#fff0b9" stroke="#c99e26" stroke-width="2.5"/>
+          <rect x="502" y="34" width="154" height="56" rx="14" fill="#d8f1ef" stroke="#24858a" stroke-width="2.5"/>
+          <rect x="736" y="34" width="154" height="56" rx="14" fill="#fbe0e9" stroke="#bd557e" stroke-width="2.5"/>
+          <rect x="971" y="34" width="154" height="56" rx="14" fill="#e1e9ff" stroke="#4268bd" stroke-width="2.5"/>
+          <text x="110" y="69" text-anchor="middle" class="svg-head">Codex CLI</text>
+          <text x="345" y="69" text-anchor="middle" class="svg-head">Codex Router</text>
+          <text x="579" y="69" text-anchor="middle" class="svg-head">Jev Router</text>
+          <text x="813" y="69" text-anchor="middle" class="svg-head">TypeSafe Jev</text>
+          <text x="1048" y="63" text-anchor="middle" class="svg-head">Caller edge</text>
+          <text x="1048" y="80" text-anchor="middle" class="svg-sub">认证 → GPT 模型</text>
+          <line x1="110" y1="91" x2="110" y2="572" class="lane-line"/>
+          <line x1="345" y1="91" x2="345" y2="572" class="lane-line"/>
+          <line x1="579" y1="91" x2="579" y2="572" class="lane-line"/>
+          <line x1="813" y1="91" x2="813" y2="572" class="lane-line"/>
+          <line x1="1048" y1="91" x2="1048" y2="572" class="lane-line"/>
+          <text x="128" y="115" class="svg-msg">1 · Responses(model=jev/auto)</text>
+          <path d="M118 132 H327" class="message-line"/>
+          <text x="359" y="161" class="svg-msg">2 · 原生请求转交本地入口</text>
+          <path d="M353 177 H561" class="message-line"/>
+          <text x="593" y="208" class="svg-msg">3 · 白名单事实 + 候选组合</text>
+          <path d="M587 224 H795" class="message-line"/>
+          <text x="591" y="260" class="svg-note">4 · pair_id + confidence</text>
+          <path d="M805 276 H597" class="return-line"/>
+          <rect x="499" y="299" width="161" height="60" rx="12" fill="#d8f1ef" stroke="#24858a" stroke-width="2.2"/>
+          <text x="579" y="323" text-anchor="middle" class="svg-msg">Guard → Apply</text>
+          <text x="579" y="343" text-anchor="middle" class="svg-small">只写 model / effort</text>
+          <text x="606" y="387" class="svg-msg">5 · 真实模型请求</text>
+          <path d="M587 402 H1030" class="message-line"/>
+          <text x="632" y="433" class="svg-note">6 · 原生 SSE / JSON 即时回传</text>
+          <path d="M1040 449 H597" class="return-line"/>
+          <path d="M571 480 H363" class="return-line"/>
+          <path d="M337 510 H128" class="return-line"/>
+          <rect x="244" y="545" width="671" height="36" rx="13" fill="#fff0b9" stroke="#c99e26" stroke-width="2"/>
+          <text x="579" y="569" text-anchor="middle" class="svg-small">Codex 执行工具 → 工具结果进入下一次模型调用 → 再执行一次路由</text>
+        </svg>
+      </div>
+      <p class="board-caption">响应传回时不等待整段生成完成。观测模块旁路读取完成事件；观测失败不阻断或改写 Codex 收到的响应。</p>
+    </section>
+
+    <section id="business">
+      <div class="section-head"><span class="num">04</span><h2>业务流程：从用户任务到交付</h2></div>
+      <p class="section-sub">模型每调用一次，就经历一次轻量路由；工具调用本身不经 Jev 决策。</p>
+      <div class="board svg-wrap">
+        <svg class="flow-svg" viewBox="0 0 1160 575" role="img" aria-labelledby="flow-title flow-desc">
+          <title id="flow-title">Jev 自动路由的业务流程图</title>
+          <desc id="flow-desc">用户发起任务，Codex 产生模型调用，路由器判断是否应直接通过，然后构造允许发送的事实和候选，调用 Jev，校验并应用模型，转发到上游。工具结果触发下一轮；任务结束记录实际结果。</desc>
+          <defs>
+            <marker id="flow-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#20272a"/></marker>
+            <marker id="flow-alt" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 Z" fill="#bd557e"/></marker>
+          </defs>
+          <rect x="20" y="20" width="1120" height="535" rx="22" fill="#fffcf4" stroke="#c9d0c9" stroke-width="2"/>
+          <rect x="53" y="58" width="183" height="73" rx="17" fill="#ffe3d1" stroke="#cb6135" stroke-width="3"/>
+          <text x="144" y="89" text-anchor="middle" class="svg-head">用户任务</text>
+          <text x="144" y="112" text-anchor="middle" class="svg-small">Codex 保持同一会话</text>
+          <rect x="299" y="58" width="183" height="73" rx="17" fill="#fff0b9" stroke="#c99e26" stroke-width="3"/>
+          <text x="390" y="89" text-anchor="middle" class="svg-head">下一次模型调用</text>
+          <text x="390" y="112" text-anchor="middle" class="svg-small">工具结果后重新进入</text>
+          <rect x="545" y="58" width="183" height="73" rx="17" fill="#d8f1ef" stroke="#24858a" stroke-width="3"/>
+          <text x="636" y="89" text-anchor="middle" class="svg-head">本地准入检查</text>
+          <text x="636" y="112" text-anchor="middle" class="svg-small">OFF / 用户固定 / infra</text>
+          <path d="M245 95 H289" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <path d="M491 95 H535" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <rect x="792" y="58" width="298" height="73" rx="17" fill="#e1e9ff" stroke="#4268bd" stroke-width="3"/>
+          <text x="941" y="89" text-anchor="middle" class="svg-head">确定性直通</text>
+          <text x="941" y="112" text-anchor="middle" class="svg-small">用户指定模型 / 固定 infra 组合</text>
+          <path d="M737 95 H782" stroke="#bd557e" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#flow-alt)"/>
+          <text x="761" y="78" text-anchor="middle" class="svg-small">是</text>
+          <path d="M636 141 V169" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <text x="655" y="159" class="svg-small">可路由</text>
+          <rect x="543" y="181" width="187" height="76" rx="17" fill="#fff0b9" stroke="#c99e26" stroke-width="3"/>
+          <text x="636" y="211" text-anchor="middle" class="svg-head">构造候选与事实</text>
+          <text x="636" y="237" text-anchor="middle" class="svg-small">隐私不过 → 固定回退</text>
+          <path d="M636 267 V290" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <rect x="543" y="302" width="187" height="76" rx="17" fill="#fbe0e9" stroke="#bd557e" stroke-width="3"/>
+          <text x="636" y="333" text-anchor="middle" class="svg-head">Jev 选择组合</text>
+          <text x="636" y="358" text-anchor="middle" class="svg-small">一次 Choice + 截止时间</text>
+          <path d="M740 340 H782" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <rect x="794" y="302" width="296" height="76" rx="17" fill="#d8f1ef" stroke="#24858a" stroke-width="3"/>
+          <text x="942" y="333" text-anchor="middle" class="svg-head">Guard → Apply</text>
+          <text x="942" y="357" text-anchor="middle" class="svg-small">无效 / 低置信 → 固定回退</text>
+          <path d="M942 388 V412" stroke="#20272a" stroke-width="3" marker-end="url(#flow-arrow)"/>
+          <rect x="794" y="424" width="296" height="76" rx="17" fill="#e1e9ff" stroke="#4268bd" stroke-width="3"/>
+          <text x="942" y="455" text-anchor="middle" class="svg-head">认证上游执行</text>
+          <text x="942" y="479" text-anchor="middle" class="svg-small">SSE 即时返回 · 实际模型可观测</text>
+          <path d="M941 141 V292" stroke="#bd557e" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#flow-alt)"/>
+          <path d="M784 463 H492" stroke="#24858a" stroke-width="2.6" stroke-dasharray="8 6" marker-end="url(#flow-arrow)"/>
+          <rect x="190" y="424" width="290" height="76" rx="17" fill="#def0dc" stroke="#3e8959" stroke-width="3"/>
+          <text x="335" y="455" text-anchor="middle" class="svg-head">Codex 处理响应</text>
+          <text x="335" y="479" text-anchor="middle" class="svg-small">要用工具？执行后回到下一调用</text>
+          <path d="M335 415 V385 H390 V141" fill="none" stroke="#3e8959" stroke-width="2.5" stroke-dasharray="8 6" marker-end="url(#flow-arrow)"/>
+          <text x="282" y="365" class="svg-small">工具结果 → 下一轮</text>
+          <text x="573" y="526" class="svg-small">任务结束：记录实际路由、用量与交付结果；质量验收使用任务产物，不用模型自报。</text>
+        </svg>
+      </div>
+      <p class="board-caption">回退只在发出上游请求之前决定。若上游已经开始输出，网络中断直接作为该次调用失败上报，不在同一调用上自动改模型重放。</p>
+    </section>
+
+    <section id="route-apply">
+      <div class="section-head"><span class="num">05</span><h2>模型怎么路由，怎么 Apply</h2></div>
+      <p class="section-sub">Jev 返回建议；本地 Guard 决定它能否执行；Apply 只改变本次请求的两个字段。</p>
+      <div class="rule-grid">
+        <div class="board">
+          <div class="tiny-label">ROUTE / BEFORE JEV</div>
+          <h3>候选集合与输入</h3>
+          <ul>
+            <li><strong>可用组合：</strong>来自认证通道实际可请求的模型与 effort；每个候选是完整的 <code>(model, effort)</code> 对。</li>
+            <li><strong>硬约束：</strong>用户手动固定模型直接执行；基础设施调用使用固定组合；不符合能力与可用性要求的组合先排除。</li>
+            <li><strong>送给 Jev：</strong>调用类型、当前模型、上下文区间、工具名称与状态、错误类别等白名单事实。任务摘要只有明确允许发送时才可加入。</li>
+            <li><strong>不送 Jev：</strong>原始用户文本、工具输出、完整会话、代码文件内容与认证信息。</li>
+          </ul>
+        </div>
+        <div class="board">
+          <div class="tiny-label">DECIDE / AFTER JEV</div>
+          <h3>校验、回退与记录</h3>
+          <ul>
+            <li><strong>Jev 回答：</strong>一个候选 pair ID 与置信度；模型和 effort 不分开拼接。</li>
+            <li><strong>Guard：</strong>检查 pair ID 属于当前候选、模型仍可请求、用户约束未被覆盖、置信度达到已校准阈值。</li>
+            <li><strong>失败回退：</strong>使用事先验证的可靠组合，例如 <code>Sol/medium</code>；不可用则在发送前明确失败。用户固定模型不会被回退降级。</li>
+            <li><strong>记录：</strong>区分 Jev 提议、实际应用和上游报告的真实模型；未知用量保留 UNKNOWN。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="apply-grid" aria-label="请求字段应用示例">
+        <div class="code-card"><div class="code-head">Codex 发出的请求 · 示意</div><pre>{
+  "model": "jev/auto",
+  "reasoning": { "effort": "medium" },
+  "input": "…",
+  "tools": ["…"],
+  "stream": true
+}</pre></div>
+        <div class="apply-arrow" aria-hidden="true">→</div>
+        <div class="code-card"><div class="code-head">Apply 后发给 caller edge · 示意</div><pre>{
+  "model": "gpt-5.6-sol",
+  "reasoning": { "effort": "high" },
+  "input": "…",
+  "tools": ["…"],
+  "stream": true
+}</pre></div>
+      </div>
+      <div class="contract-note">Apply 合约：<code>routed = { ...request, model: chosen.model, reasoning: { ...request.reasoning, effort: chosen.effort } }</code>。<code>input</code>、工具定义、工具调用 ID、stream 标记与其余请求字段原样保留；<code>service_tier</code> 不暗中改写。</div>
+    </section>
+
+    <section id="review">
+      <div class="section-head"><span class="num">06</span><h2>请重点 Review 的三个决定</h2></div>
+      <p class="section-sub">这些决定影响能否从已通过的可行性测试走向稳定自动路由。</p>
+      <div class="review-grid">
+        <article class="sketch-card blue"><div class="tiny-label">R1 · TRANSPORT</div><h3>认证 caller edge 的契约</h3><p>确认验证通过的是哪个版本和入口；明确认证归属、请求头转发、取消传播与 caller edge 升级时的兼容测试。该入口必须绕开 <code>jev/auto</code> 再路由。</p></article>
+        <article class="sketch-card pink"><div class="tiny-label">R2 · ROUTING SIGNAL</div><h3>隐私与决策信息量</h3><p>在不发送原文的前提下，确定哪些结构化事实足以让 Jev 区分简单跟进和困难推理。若事实不足，该次调用使用可靠组合，并在 shadow 数据中量化比例。</p></article>
+        <article class="sketch-card green"><div class="tiny-label">R3 · QUALITY + COST</div><h3>激活标准</h3><p>先在 shadow 模式记录延迟、提议组合和故障；再用相同任务与验收标准做配对执行，计入 Jev、缓存损失与返工。只有质量达标才讨论总成本收益。</p></article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell">
+      <span>Jev × Codex · 技术设计草案 · 2026-09-23</span>
+      <span>参考：<a href="https://gist.github.com/antoniolg/62f82f2a5d191fe074e3f5065501993d">Gist 拓扑</a> · <a href="https://docs.typesafe.ai/patterns/confidence-routing">TypeSafe 置信度路由</a> · <a href="https://learn.chatgpt.com/docs/config-file/config-reference">Codex 配置</a></span>
+    </div>
+  </footer>
+</body>
+</html>

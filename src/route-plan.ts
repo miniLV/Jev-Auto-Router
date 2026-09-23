@@ -1,27 +1,20 @@
 import { digest } from "./canonical.js";
-import type { StepType } from "./types.js";
+import { AUTO_MODEL, parseStepType, type StepType } from "./types.js";
 
-export const ROUTING_STATE_SCHEMA = "routing-state/1";
-export const QUESTION_SCHEMA_VERSION = "choice-pairs/1";
-
-/** Allowlisted tool facts: names, exit status, error codes, fixed-length digests. Never raw text. */
-export interface ToolFacts {
-  tool_name: string;
-  exit_status: number | "UNKNOWN";
-  error_codes: string[];
-  /** Fixed-length digest of error text, never the text itself. */
-  error_digest?: string;
-}
+export const ROUTING_STATE_SCHEMA = "routing-state/2";
+export const QUESTION_SCHEMA_VERSION = "choice-pairs/2";
 
 export interface RoutingState {
-  task_id: string;
-  call_index: number;
   step_type: StepType;
   current_model?: string;
   context_size_bucket?: "small" | "medium" | "large";
-  tool_facts?: ToolFacts;
   user_turn_facts?: { request_length_bucket: "short" | "medium" | "long" };
-  correction_facts?: { failing_item_ids: string[] };
+}
+
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+export function isBoundedModelId(value: unknown): value is string {
+  return typeof value === "string" && MODEL_ID.test(value) && value !== AUTO_MODEL;
 }
 
 const SENSITIVE_PATTERNS: RegExp[] = [
@@ -51,38 +44,49 @@ export function checkSendEligibility(state: RoutingState, rawHints: string[] = [
   if (rawHints.some(hint => looksSensitive(hint))) {
     return { hasSendEligibility: false, reason: "sensitive_content" };
   }
-  if (state.tool_facts?.error_digest !== undefined && looksSensitive(state.tool_facts.error_digest)) {
-    return { hasSendEligibility: false, reason: "sensitive_content" };
-  }
   return { hasSendEligibility: true };
 }
 
 /**
- * Build the compact routing state from allowlisted inputs. `rawHints` carry
- * bounded text (tool output tails, request prefixes) only for the sensitive
- * check — they never enter the state or the wire payload.
+ * Fact sufficiency (routing-policy §4): the step type alone cannot support
+ * the versioned Choice question. At least one decision-relevant fact —
+ * current model, context bucket or user turn shape — must be present,
+ * otherwise Jev is not called and the
+ * baseline runs with `insufficient_routing_facts`.
+ */
+export function factsSufficientForChoice(state: RoutingState): boolean {
+  return (
+    state.current_model !== undefined ||
+    state.context_size_bucket !== undefined ||
+    state.user_turn_facts !== undefined
+  );
+}
+
+/**
+ * Build the compact routing state from allowlisted inputs. Tool facts have no
+ * trusted source in this runtime and are deliberately absent. `rawHints` are
+ * checked locally and never enter the state or wire payload.
  */
 export function buildRoutingState(input: {
-  task_id: string;
-  call_index: number;
-  step_type: StepType;
-  current_model?: string;
-  context_size_bucket?: RoutingState["context_size_bucket"];
-  tool_facts?: ToolFacts;
+  step_type: unknown;
+  known_model_ids: readonly string[];
+  current_model?: unknown;
+  context_size_bucket?: unknown;
   user_turn?: { request_text: string };
-  correction_facts?: RoutingState["correction_facts"];
   rawHints?: string[];
 }): { state: RoutingState; privacy: PrivacyCheck } {
-  const state: RoutingState = {
-    task_id: input.task_id,
-    call_index: input.call_index,
-    step_type: input.step_type,
-    current_model: input.current_model,
-    context_size_bucket: input.context_size_bucket,
-    tool_facts: input.tool_facts,
-    correction_facts: input.correction_facts,
-  };
-  if (input.user_turn) {
+  const stepType = parseStepType(input.step_type);
+  const currentModel = isBoundedModelId(input.current_model) &&
+    input.known_model_ids.includes(input.current_model)
+    ? input.current_model
+    : undefined;
+  const contextBucket = input.context_size_bucket === "small" || input.context_size_bucket === "medium" || input.context_size_bucket === "large"
+    ? input.context_size_bucket
+    : undefined;
+  const state: RoutingState = { step_type: stepType };
+  if (currentModel !== undefined) state.current_model = currentModel;
+  if (contextBucket !== undefined) state.context_size_bucket = contextBucket;
+  if (input.user_turn && stepType === "user_turn") {
     const length = input.user_turn.request_text.length;
     state.user_turn_facts = {
       request_length_bucket: length < 500 ? "short" : length < 5000 ? "medium" : "long",
@@ -123,7 +127,7 @@ export interface RouteDecision {
   route_source: "jev" | "fallback" | "bypass";
   selected_pair: { model: string; effort: string };
   fallback_reason?: string;
-  gpt6_eligibility_reason?: string;
+  astra_eligibility_reason?: string;
 }
 
 /** The frozen Choice instruction: one Choice over pair IDs, objective stated directly. */

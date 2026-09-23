@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  consumeGpt6Eligibility,
+  consumeAstraEligibility,
   immediateTakeover,
   newTask,
-  openGpt6Eligibility,
+  openAstraEligibility,
   recordVerification,
   verifyTask,
 } from "../src/verification.js";
@@ -81,12 +81,12 @@ test("immediate takeover bypasses cycle counting", () => {
   assert.equal(task.takeover, "permission_problem");
 });
 
-test("GPT-6 eligibility is one-shot: consumed by use, opened once", () => {
+test("Astra eligibility is one-shot: consumed by use, opened once", () => {
   let task = newTask("t");
-  task = openGpt6Eligibility(task, "reasoning-blocker", "ev:1");
-  assert.ok(task.gpt6_eligibility);
-  const reopened = openGpt6Eligibility(task, "other", "ev:2");
-  assert.equal(reopened.gpt6_eligibility?.evidence_ref, "ev:1");
-  task = consumeGpt6Eligibility(task);
-  assert.equal(task.gpt6_eligibility, undefined);
+  task = openAstraEligibility(task, "reasoning-blocker", "ev:1");
+  assert.ok(task.astra_eligibility);
+  const reopened = openAstraEligibility(task, "other", "ev:2");
+  assert.equal(reopened.astra_eligibility?.evidence_ref, "ev:1");
+  task = consumeAstraEligibility(task);
+  assert.equal(task.astra_eligibility, undefined);
 });

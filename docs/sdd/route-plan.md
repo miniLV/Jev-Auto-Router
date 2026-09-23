@@ -1,5 +1,8 @@
 # Routing state, candidates and route schemas
 
+> Legacy prototype schema; superseded by [Scheme A](../solution.md). Ticket 03
+> will replace it. It is not a runtime contract.
+
 Repository-owned schemas for one routed model call. Jev wire fields are
 private to the adapter seam. See [capability-catalog.md](capability-catalog.md)
 for pair validation and [decision-receipt.md](decision-receipt.md) for the
@@ -32,7 +35,7 @@ reaches Jev. The session itself never leaves the host.
 ~~~text
 CandidatePair {
   pair_id,                       // stable hash of (model, effort)
-  tier: luna_max | terra | sol | gpt6,
+  tier: luna_max | sol | astra,
   model, reasoning_effort,       // validated host-requestable combination
   exclusion_reason?              // only on excluded records
 }
@@ -42,8 +45,8 @@ CandidateSet { pairs[], excluded[], digest, policy_version }
 Pairs are validated `(model, reasoning_effort)` combinations — never
 independent model and effort answers. Construction admits or excludes
 deterministically (unsupported pair, disabled tier, user hard constraint,
-GPT-6 gate) and never ranks, never shapes a shortlist, never applies a
-task-type table. `luna_max` binds to `gpt-5.6-luna` + `max`; if `max` is not
+Astra gate) and never ranks, never shapes a shortlist, never applies a
+task-type table. `luna_max` binds to `gpt-6-luna` + `max`; if `max` is not
 requestable, the catalog must expose the supported pairs and the tier naming
 must be corrected. The set digest binds the decision for reproducible
 records.
@@ -64,7 +67,7 @@ RouteDecision {
   route_source: jev | fallback | bypass,
   selected_pair,                  // executed or would-be (shadow)
   fallback_reason?,               // when route_source != jev
-  gpt6_eligibility_reason?        // only while eligibility is open
+  astra_eligibility_reason?        // only while eligibility is open
 }
 ~~~
 

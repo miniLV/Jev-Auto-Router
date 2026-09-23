@@ -1,73 +1,77 @@
-# ADR 0017: Per-call Responses routing
+# ADR 0017: Route `jev/auto` per Model Call through an authenticated caller edge
 
 Date: 2026-09-20
-Status: Accepted
-Supersedes: the superseded worker-era decisions (capsules, per-unit
-    delegation, worker budgets, publication transactions) are retired;
-    their machinery is not carried into V1
+Status: Accepted (revised 2026-09-23)
+Supersedes: the worker-era routing design and the earlier revision of ADR 0017
 
 ## Context
 
-The final technical review of the proposed V1 solution returned "approve
-with changes" on routing **per model call inside one Codex session**, with
-four contract tightenings: prove Codex per-call switching feasibility
-first; move completion verification outside the dynamic routing loop;
-select a valid `(model, reasoning_effort)` pair in a single Jev Choice;
-and separate GPT-6 "allowed to consider" from "must use".
+The product needs to choose a model and reasoning effort for successive Model
+Calls inside one Codex conversation without replacing Codex's tool loop. A real
+Codex A→B→A report established enough transport feasibility to adopt the
+request-path architecture, while leaving effort fidelity, cancellation,
+compaction and repeatability as explicit release evidence still to collect.
 
-A prior TaskUnit/worker design existed: capsules, capability
-catalogs of agents/Skills/MCPs, sixteen-check Policy Guard, isolated
-baselines, publication transactions, observation windows and evidence
-transitions. The review's per-call verdict retired that runtime: the unit
-of routing becomes the model call after a tool result, executed by the
-same session through a local Responses proxy — no workers, no capsules, no
-per-call isolation state machine. The granularity is implementable on the
-Responses request path, but task quality and real savings remain unproven
-in this product.
+The first revision of this ADR assumed every meaningful Responses call entered
+one proxy, used `Terra/medium` as the default fallback, and restored the host's
+original model when routing was OFF. That contract cannot distinguish manual
+real-model control from the virtual automatic entry and is incompatible with
+the authenticated caller edge used by the proven path.
 
 ## Decision
 
-1. **Routing unit:** the model call. A local Responses proxy gates each
-   call (router OFF, infrastructure bypass, privacy refusal), builds
-   compact allowlisted routing state and validated candidate pairs, asks
-   Jev **one Choice over `(model, effort)` pairs**, forwards natively with
-   unchanged streaming events, and records actual pair and usage.
-2. **Fallback:** low confidence, timeout, malformed or transport failure
-   falls back to the configured baseline (default Terra/medium) with a
-   recorded reason — fixed reliability handling, never a semantic second
-   selector. A transport failure skips Jev for the remainder of the task.
-   The kill switch restores the host's originally specified model and
-   never downgrades user-chosen Sol/GPT-6.
-3. **Jev version:** production pins a validated version; `jev-latest` runs
-   in shadow only; requested/resolved versions are always recorded.
-4. **GPT-6:** absent by default. One-shot eligibility from verified
-   reasoning-blocker evidence; explicit user mandate is a separate hard
-   constraint. Root takes over if Jev persistently avoids an
-   evidenced-necessary GPT-6 call; Jev's answer is never rewritten.
-5. **Verification:** independent, at the task boundary, outside the
-   economic routing loop; acceptance read from the original request;
-   fixed verification tier for semantic judgment; self-report is never
-   evidence. Two correction cycles maximum, then Root takeover.
-6. **Observation:** Router Compass records per-call facts and one task
-   conclusion; UNKNOWN is never zero; savings claims follow the
-   observed / replay / controlled-benchmark evidence ladder; replay is an
-   offline script only.
-7. **P0 gate:** before any routing logic is trusted, a real Codex
-   A→B→A tool-loop proof must pass (auth, model/effort fidelity,
-   tool-call IDs, SSE, cancellation, continuation/compaction). A critical
-   failure stops per-call promotion and reopens the host interface
-   question.
+1. **Entry and unit.** Codex selects the virtual model `jev/auto` to opt into
+   automatic routing. Only that model enters the Jev Router. A real model ID is
+   manual selection and follows the normal Codex Router path unchanged. The
+   routing unit remains one Responses Model Call in the same Codex conversation;
+   Codex continues to execute tools.
+2. **Authenticated execution.** The Jev Router sends a real model ID through a
+   caller edge whose authentication and requestability have been verified. The
+   caller edge cannot recurse to `jev/auto`. Upstream credentials and Jev
+   credentials are separate.
+3. **Choice contract.** The router sends only allowlisted Routing State and
+   caller-edge-proved Candidate Pairs to one pinned Jev version for one Choice.
+   Guard validates the answer. Apply changes only `model` and
+   `reasoning.effort`; native request and response semantics otherwise remain
+   intact.
+4. **Fallback contract.** One configured, caller-edge-proved Fallback Baseline
+   handles OFF, infrastructure or competing authority, privacy refusal,
+   insufficient facts, Jev failure, invalid or low-confidence answers and
+   Guard rejection. Reasons remain distinct. The old universal
+   `Terra/medium` default and OFF-to-original-request rules are retired. An
+   unavailable baseline fails explicitly before output.
+5. **Streaming and cancellation.** Native SSE or JSON is relayed without
+   waiting for complete observation. Cancellation aborts the active Jev or
+   upstream work. Once output starts, a failure is reported without changing
+   models or replaying the request.
+6. **Observation.** Jev's Proposed Pair, the Applied Pair and the upstream
+   Observed Pair are independent facts. Missing model, effort or usage stays
+   `UNKNOWN`; no field is backfilled from another.
+7. **Promotion and value.** Shadow Mode precedes Active for each exact versioned
+   configuration. Active promotion requires repeatable transport evidence,
+   including continuation, early streaming, cancellation and compaction.
+   Main Task quality is independently evaluated; savings require a complete
+   paired comparison against the fixed baseline.
+8. **Controlled evidence collection.** A separate `bench/` entry may run
+   real local Codex calls in Active for a frozen plan so maintainers can
+   collect the transport and paired-task evidence needed by Issues 06/07. It
+   binds the exact proved Candidate Pairs, baseline, catalog, caller edge and
+   runtime versions, listens only on loopback, and marks its sanitized run
+   artifacts `EVALUATION_ONLY`. It is not called by `main()` and cannot satisfy
+   the production Active report gate.
 
 ## Consequences
 
-- Five runtime modules (proxy, routing, verification, telemetry, entry)
-  plus offline bench replace the worker-era modules; the SDD set is
-  rewritten and `task-capsule.md` deleted.
-- The old benchmark harness's UNKNOWN→zero conversion is a defect; its
-  passing tests are not economic evidence.
-- Cache economics are measured, not optimized; a switch threshold, if
-  ever justified, arrives as a new policy version validated by the same
-  ladder.
-- Route-selection intelligence remains in exactly one place — Jev, through
-  one adapter seam — with no heuristic classifier, task-kind table, tier
-  ladder or second selector anywhere in the repository.
+- The router is a small request adapter, not a worker/orchestration runtime or
+  second Codex loop.
+- Candidate availability is evidence from the current authenticated edge, not
+  a catalog claim.
+- Failure behavior stays deterministic without adding a local semantic
+  selector.
+- The existing prototype intentionally lags this decision until tickets 02–05
+  migrate forwarding, streaming, mode and cancellation behavior.
+- Changing the caller edge, Fallback Baseline, Candidate Pairs, Jev version,
+  question schema or policy version requires new Shadow and transport evidence
+  before Active use.
+- The local evaluation process is evidence collection only. Production Active
+  remains closed until the independent paired report passes the formal gate.

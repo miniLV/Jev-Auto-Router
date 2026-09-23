@@ -1,5 +1,9 @@
 # Task lifecycle and verification
 
+> Legacy prototype design; superseded by [Scheme A](../solution.md). Its
+> correction-cycle, takeover and Astra rules are not part of the current
+> runtime contract.
+
 This module owns task-boundary state, the independent verification
 contract, correction-cycle counting and Root takeover. It never chooses a
 model and it owns no worker, capsule, baseline or publication machinery:
@@ -12,7 +16,7 @@ TaskState {
   task_id,                        // one Main Task
   status: running | verifying | completed | unverified | taken_over,
   correction_cycles,              // monotonic; default max 2
-  gpt6_eligibility?: { reason_code, evidence_ref, expires_after_use: true },
+  astra_eligibility?: { reason_code, evidence_ref, expires_after_use: true },
   pre_task_diff_ref,              // user's pre-existing changes are never overwritten
   failure_facts?                  // bounded facts from the last FAIL
 }
@@ -56,11 +60,11 @@ executions" accounting is deleted.
 - **Immediate takeover**, regardless of cycle count: the same defect
   recurring after a correction; scope runaway; permission problems;
   unclear context or execution identity; Jev persistently avoiding a
-  GPT-6 call that evidence shows necessary.
+  Astra call that evidence shows necessary.
 - Jev's answer is never silently rewritten. Takeover is an explicit,
   recorded change of execution authority.
 
-## GPT-6 eligibility lifecycle
+## Astra eligibility lifecycle
 
 One verified reasoning-blocker evidence grants one eligibility for the
 next call targeting that blocker. The eligibility is consumed by use or

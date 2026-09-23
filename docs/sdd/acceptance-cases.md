@@ -1,5 +1,8 @@
 # V1 acceptance cases
 
+> Legacy prototype cases; superseded by local tickets 02–07 under
+> [Scheme A](../solution.md). They are not current acceptance requirements.
+
 The implementation handoff. Cases are behavioral: exercise the public
 module interfaces (proxy, routing, verification, telemetry, entry) with
 deterministic fixtures, then prove the host-dependent cases on a real
@@ -23,22 +26,22 @@ Phases: **P0** switching proof → **P1** schemas/offline behavior →
 | --- | --- |
 | A06 | Candidates are validated `(model, effort)` pairs from host discovery; unsupported pairs are excluded with recorded reason; construction never ranks or shapes shortlists |
 | A07 | One decision = one Choice over pair IDs; the adapter resolves by exact lookup and cannot fill/substitute; a returned unknown ID is `malformed` |
-| A08 | Luna Max binds to `gpt-5.6-luna` + `max`; if `max` is unrequestable, the supported pairs surface and the naming defect is reported, not papered over |
+| A08 | Luna Max binds to `gpt-6-luna` + `max`; if `max` is unrequestable, the supported pairs surface and the naming defect is reported, not papered over |
 | A09 | Low confidence / timeout / malformed → configured baseline with `route_source = fallback` and reason; baseline unavailable → host's original request or explicit error, never a silent external provider switch |
 | A10 | Transport failure → baseline **and Jev skipped for the remainder of the task**; subsequent calls record `bypass` without HTTP |
-| A11 | Kill switch bypasses Jev and restores the host's originally specified model; a user-chosen Sol or GPT-6 request is never downgraded to Terra by kill switch or fallback |
+| A11 | Kill switch bypasses Jev and restores the host's originally specified model; a user-chosen Sol or Astra request is never downgraded by kill switch or fallback |
 | A12 | Shadow mode logs would-be routes with `mode = shadow` while execution uses the baseline; shadow never changes execution |
 | A13 | Version discipline: active routing requests the pinned Jev version; resolved version recorded (UNKNOWN when unexposed); a resolved-version change under an active `latest` alias demotes to shadow/baseline |
 | A14 | Infrastructure (`compaction`-style) and `verification` calls are excluded from economic routing and use their fixed profiles; `tool_step` calls participate |
 
-## GPT-6 gating
+## Astra gating
 
 | ID | Required case |
 | --- | --- |
-| A15 | GPT-6 absent from candidates by default; one verified blocker evidence opens exactly one eligibility for the next targeting call; consumed or resolved eligibility cannot admit GPT-6 again |
-| A16 | An ordinary Sol failure leaves routine tool calls unexposed to GPT-6 (no persistent eligibility) |
-| A17 | An explicit "must use GPT-6" user instruction executes as a hard constraint over its stated scope; the Guard denies a Terra selection for that call |
-| A18 | Jev persistently avoiding an evidenced-necessary GPT-6 call triggers Root takeover; Jev's answer is never rewritten in place |
+| A15 | Astra absent from candidates by default; one verified blocker evidence opens exactly one eligibility for the next targeting call; consumed or resolved eligibility cannot admit Astra again |
+| A16 | An ordinary Sol failure leaves routine tool calls unexposed to Astra (no persistent eligibility) |
+| A17 | An explicit "must use Astra" user instruction executes as a hard constraint over its stated scope; the Guard denies a Sol selection for that call |
+| A18 | Jev persistently avoiding an evidenced-necessary Astra call triggers Root takeover; Jev's answer is never rewritten in place |
 
 ## Privacy
 
@@ -68,7 +71,7 @@ Phases: **P0** switching proof → **P1** schemas/offline behavior →
 | A30 | Compass aggregates compute from records without re-persistence and never feed back into online routing; quota/usage/credit/model-mix/latency are never routing inputs |
 | A31 | Historical replay output is labeled `ESTIMATED/COUNTERFACTUAL`; it cannot produce a production savings claim |
 | A32 | Controlled comparison counts Jev, verification, failures, corrections, takeover and all model calls in both arms, with declared cache conditions; quality is checked before cost |
-| A33 | Top-level metrics capped at the eight defined; correction cycles, latency, tier shares, cache hits and GPT-6 usage appear only as diagnostics |
+| A33 | Top-level metrics capped at the eight defined; correction cycles, latency, tier shares, cache hits and Astra usage appear only as diagnostics |
 
 ## Static-test migration
 

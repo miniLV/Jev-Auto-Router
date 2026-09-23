@@ -1,5 +1,8 @@
 # Jev adapter
 
+> Legacy prototype design; superseded by [Scheme A](../solution.md). Ticket 03
+> will replace it. It is not a runtime contract.
+
 The single seam where the Jev API appears. Interface:
 `choose(RoutingState, CandidateSet, PolicyRef) -> JevDecision`. It does not
 discover models, forward requests, grant permissions or invent routes.

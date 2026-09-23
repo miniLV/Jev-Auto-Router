@@ -1,4 +1,5 @@
 import type { CandidateSet, CandidateConstraints } from "./catalog.js";
+import { hasPinnedJevVersion } from "./jev-adapter.js";
 import type { JevDecision } from "./route-plan.js";
 
 export type GuardReason =
@@ -6,7 +7,7 @@ export type GuardReason =
   | "LOW_CONFIDENCE"
   | "PAIR_UNAVAILABLE"
   | "HARD_CONSTRAINT"
-  | "GPT6_NOT_ADMITTED"
+  | "ASTRA_NOT_ADMITTED"
   | "VERSION_DRIFT"
   | "PRIVACY_REFUSAL";
 
@@ -53,13 +54,13 @@ export function validate(
     return { verdict: "DENY", reason: "HARD_CONSTRAINT" };
   }
 
-  // 5. GPT-6 appears only under open one-shot eligibility or explicit mandate.
-  if (pair.tier === "gpt6" && !constraints.gpt6Admitted) {
-    return { verdict: "DENY", reason: "GPT6_NOT_ADMITTED" };
+  // 5. Astra appears only under open one-shot eligibility or explicit mandate.
+  if (pair.tier === "astra" && !constraints.astraAdmitted) {
+    return { verdict: "DENY", reason: "ASTRA_NOT_ADMITTED" };
   }
 
   // 6. Response model matches the pinned Jev version.
-  if (decision.jev_resolved_version !== "UNKNOWN" && decision.jev_resolved_version !== decision.jev_requested_version) {
+  if (!hasPinnedJevVersion(decision.jev_requested_version, decision.jev_resolved_version)) {
     return { verdict: "DENY", reason: "VERSION_DRIFT" };
   }
 

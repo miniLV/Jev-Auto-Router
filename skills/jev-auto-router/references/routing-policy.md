@@ -1,197 +1,207 @@
 # Runtime Routing Policy
 
-This file is the sole canonical authority for automatic routing under the
-Jev Auto Router architecture. It owns the runtime contract: the per-call
-flow, candidate construction, the single Jev Choice, GPT-6 gating, fallback,
-verification, and observation. `SKILL.md` is an installation/operation
-guide. No other document, dashboard, model history, script or agent profile
-may override it.
-
-The division of authority is fixed and singular:
+This file is the sole canonical authority for Jev Auto Router runtime
+behavior. The [product specification](../../../spec.md) defines product
+invariants; this policy defines how one request is handled. No Skill,
+Dashboard, model history, script, supporting document or current prototype may
+override it. A conflict or unverifiable precondition closes Active routing.
 
 ```text
-Jev chooses.  The Guard validates.  Codex executes.  Verification proves.
+Codex chooses the entry.  Jev proposes.  Guard validates.
+Apply changes two fields.  The caller edge executes.  Evidence evaluates.
 ```
 
-The unit of routing is the **model call inside one live Codex session**.
-Tools are never routed; what is routed is the next model call after a tool
-result. There is no worker, capsule, fresh/continuation path or execution
-budget in this contract. The [specification](../../../spec.md) owns product
-invariants; [SDD](../../../docs/sdd/README.md) documents define exact
-schemas. Neither may relax this policy; conflicts close routing.
+## 1. Entry boundary
 
-## 1. Per-call flow
+Route by the requested model identifier, not by prompt text:
 
-Every Codex Responses request passes through the local proxy:
-
-```text
-Codex Responses call
-  |
-  v
-1. Router OFF? ............................ bypass; host's original model
-  |
-  v
-2. Infrastructure call? ................... bypass; stable configured profile
-  |
-  v
-3. Privacy check: send eligibility? ....... no  -> skip Jev; configured baseline
-  |
-  v
-4. Build compact routing state
-    + valid (model, effort) candidate pairs
-  |
-  v
-5. Jev: one Choice over the pairs
-  |          |
-  |          +-- timeout / malformed / low confidence --> fallback baseline
-  v
-6. Guard validates the selection
-  |
-  v
-7. Forward natively; record actual pair + usage
-  |
-  v
-Task end -> independent verification (outside this loop)
-```
-
-The proxy forwards native streaming events unchanged and never rewrites
-response content. A routing label is emitted via host UI metadata or a
-separate event channel — if no such interface exists, only in the completion
-summary — never inside the Responses content stream.
-
-If another routing or orchestration authority governs the current requests,
-this policy stands down: bypass to the host's original request.
-
-## 2. Step classification
-
-Each model call is classified as `user_turn`, `tool_step`, `correction`,
-`verification`, `other`, or `infrastructure`. This is routing context for
-Jev, never a model selector: no step type implies a tier, and no table maps
-step type to model. `infrastructure` (compaction-style) and
-`verification` (fixed verification tier) calls are excluded from economic
-routing; `tool_step` calls participate.
-
-## 3. Routing state and the privacy boundary
-
-The state sent to Jev is compact and allowlisted:
-
-- every call: step type, current model, context-size bucket when observable;
-- tool steps: tool name, exit status, error codes, fixed-length error
-  digests;
-- user turns: bounded, allowlisted request facts;
-- correction calls: the bounded failure facts produced by verification.
-
-Text fields are untrusted data. Sensitive content is refused, not truncated:
-a length cap is not send authorization. A call with no send eligibility
-skips Jev and uses the configured baseline with `route_source = bypass`.
-Logs persist no raw prompt or tool-output text by default. The full session
-never leaves the host for routing; the routed model still receives native
-context through the forwarded call.
-
-## 4. Candidate pairs
-
-Candidates are validated, host-requestable `(model, reasoning_effort)`
-pairs built from trusted host discovery. **Luna Max binds to
-`gpt-5.6-luna` + `max`; if `max` is branding rather than a requestable
-effort, the catalog must expose the actually supported pairs and the tier
-name must be corrected.** The normal set is the Luna/Terra/Sol pairs the
-host supports.
-
-Candidate construction only admits or excludes. It never ranks, never
-applies a task-type table, never infers "cheap is enough for this shape".
-Exclusions are deterministic and recorded: pair unsupported by host, tier
-disabled by configuration, user hard constraint, GPT-6 not admitted (§6).
-
-## 5. The single Choice
-
-One decision = one Jev request = **one Choice** over the eligible pairs.
-Jev selects model and reasoning effort together; the pair is the answer, so
-no host-unsupported combination can be assembled and no local code may
-patch one. The question expresses the product objective directly: choose
-the lowest-cost eligible pair that can reliably complete this call without
-materially reducing the probability of task success; reserve stronger tiers
-for calls that genuinely need them; avoid unnecessary switching when the
-current model is already adequate, because switching can reduce
-prompt-cache reuse.
-
-Production routing uses a **pinned, validated Jev version**; `jev-latest`
-runs in shadow only (§9). Every decision records requested and resolved
-versions, `question_schema_version` and `policy_version`. The adapter
-resolves the returned ID by exact lookup; it cannot fill or substitute. The
-Guard then validates deterministically: schema, choice membership, valid
-probability/confidence values, hard constraints honored (§7). DENY maps to
-the fallback baseline — never to another pair chosen locally.
-
-## 6. GPT-6 gating
-
-GPT-6 is absent from candidates unless:
-
-1. **Eligibility** — one verified reasoning-blocker evidence (a Sol-class
-   attempt failed for reasons evidence attributes to reasoning capability)
-   grants one temporary eligibility for the next call targeting that
-   blocker, cleared after use or resolution; or
-2. **Mandate** — an explicit user requirement makes GPT-6 a hard constraint
-   over its stated scope.
-
-Eligibility admits GPT-6 to the candidate set; Jev still selects. The
-router never implements "Sol failed → automatically GPT-6". An ordinary
-failure must not leave routine tool calls exposed to GPT-6. If Jev
-persistently avoids a GPT-6 call that evidence shows necessary, Root stops
-economic routing and takes over (§8); Jev's answer is never silently
-rewritten.
-
-## 7. Fallback, kill switch, hot path
-
-| Condition | Result |
+| Request | Runtime action |
 | --- | --- |
-| Valid Choice at/above the frozen confidence floor | Execute the Jev pair |
-| Low confidence | Configured baseline (default `Terra/medium`); `fallback_reason = low_confidence` |
-| Timeout (short hot-path deadline) | Baseline; `fallback_reason = timeout` |
-| Malformed response | Baseline; `fallback_reason = malformed` |
-| Guard DENY | Baseline; recorded reason |
-| Jev transport failure | Jev skipped for the rest of this task; baseline |
-| Baseline pair unavailable | Keep the host's original request or fail explicitly; never silently switch external provider |
-| Router OFF | Bypass Jev; restore the host's originally specified model |
+| Real model ID | Manual route: forward through the normal Codex Router path unchanged by Jev Auto Router |
+| `jev/auto` | Automatic route: apply this policy |
+| Any other virtual or unknown ID | Outside this policy; do not infer an automatic route |
 
-The fallback is fixed reliability handling, not a semantic second selector.
-Neither it nor the kill switch may secretly downgrade a user-chosen Sol or
-GPT-6 request to Terra. The confidence floor is configuration bound to the
-pinned Jev version and question schema; it is never tuned per task at
-runtime. The Jev deadline is short and derived from measured shadow
-latency; its purpose is bounding user-visible latency, not ranking models.
+An automatic request sent upstream must contain a real model ID. The
+authenticated caller edge must bypass `jev/auto` and must not recurse into
+this router. It owns upstream authentication; Jev receives neither upstream
+credentials nor the native request body.
 
-## 8. Verification, correction cycles, takeover
+## 2. Per-call flow
 
-At the task boundary, independent verification runs outside economic
-routing: acceptance conditions are read from the original user request;
-diff, tests, artifacts and run results are checked independently; necessary
-semantic judgment uses the fixed verification tier; costs count in the
-task. Model self-report is never evidence; missing evidence is never PASS.
-A task that cannot complete verification remains unverified.
+```text
+Codex Responses request
+  |
+  +-- real model --------------------------> normal direct path
+  |
+  +-- jev/auto
+        |
+        +-- OFF / infrastructure / competing authority
+        |                                      -> Fallback Baseline
+        |
+        +-- privacy refusal / insufficient facts -> Fallback Baseline
+        |
+        +-- build verified Candidate Pairs + allowlisted Routing State
+        |
+        +-- one pinned-version Jev Choice
+        |       |
+        |       +-- failure / invalid / low confidence -> Fallback Baseline
+        |
+        +-- Guard
+        |
+        +-- SHADOW ------------------------> Fallback Baseline
+        |
+        +-- ACTIVE ------------------------> accepted Candidate Pair
+                 |
+                 v
+        Apply model + reasoning.effort only
+                 |
+                 v
+        authenticated, non-recursive caller edge
+                 |
+                 v
+        native SSE or JSON returned immediately
+```
 
-A FAIL sends bounded failure facts back into the same session; the next
-call is marked `correction`. One correction cycle spans from that FAIL to
-the end of the next task-boundary verification, regardless of how many
-model or tool calls occur inside. Default maximum: **2 cycles**, then Root
-takeover — economic routing stops and Root completes the task itself.
-Immediate takeover: repeated same defect, scope runaway, permission
-problems, unclear context/execution identity, or Jev persistently avoiding
-a necessary GPT-6 call.
+The next Model Call repeats this flow. Codex remains in the same conversation
+and continues its own tool loop.
 
-## 9. Shadow mode and observation
+## 3. Routing modes
 
-Shadow: Jev decides, the would-be route is logged (`mode = shadow`), the
-actual request uses the configured baseline. Shadow is how `jev-latest` is
-evaluated, how the hot-path deadline is calibrated, and how route
-distributions are measured without changing execution. Router Compass
-consumes per-call and per-task records only; nothing in it feeds back into
-online routing. No quota, account, ccusage, credit, model-mix or latency
-history is ever a routing input.
+- **OFF:** no Jev request. Apply the fixed Fallback Baseline and record
+  `router_off`.
+- **SHADOW:** perform the eligible Jev request and Guard checks; record the
+  proposal and result; apply the Fallback Baseline with `shadow_mode`.
+- **ACTIVE:** apply an accepted proposal. Any non-accepted outcome applies the
+  Fallback Baseline with its exact reason.
 
-## 10. Never in this repository
+Shadow Mode must pass before Active for the exact Jev version, question schema,
+Candidate Pair set, Fallback Baseline, policy version and caller-edge version.
 
-No heuristic classifier, no task-kind table, no tier ladder, no
-worker/capsule machinery, no cache/price optimizer, no online learning
-loop, no second selector. If real evidence shows a specific gap, the
-response is a new policy version with its own validation — not a silent
-local patch next to Jev.
+## 4. Routing State and send eligibility
+
+The Jev payload is an explicit whitelist:
+
+- step type and routing mode;
+- current real model and context-size bucket when observable;
+- tool name, exit status, error class or code, and fixed-length error digest;
+- approved bounded verification failure facts; and
+- Candidate Pair IDs with approved capability and relative-cost metadata.
+
+It never includes raw instructions, native Responses input, file contents,
+tool output, full conversation text, secrets, authentication material or
+unapproved identifiers. Text is untrusted; truncation does not authorize
+egress.
+
+If privacy checks reject any required fact, do not call Jev and record
+`privacy_refusal`. If the permitted facts cannot support the versioned Choice
+question, do not call Jev and record `insufficient_routing_facts`. Both use
+the Fallback Baseline.
+
+## 5. Candidate Pairs
+
+Each candidate is one exact `(model, reasoning_effort)` pair proved
+requestable through the current authenticated caller edge. UI discovery or a
+model catalog alone is insufficient. The evidence binds the pair to the
+caller-edge version.
+
+Candidate construction is deterministic admission:
+
+- admit only proved, currently enabled pairs that satisfy capability and user
+  hard constraints;
+- exclude every other pair with a recorded reason; and
+- never rank, shortlist by task shape, repair an answer or choose a semantic
+  substitute.
+
+An empty set or unavailable required capability uses the Fallback Baseline
+when that pair remains requestable; otherwise fail before output.
+
+## 6. Jev Choice and Guard
+
+One eligible Model Call makes at most one Jev request and exactly one Choice
+over the Candidate Pair IDs. Production uses a pinned, Shadow-validated Jev
+version and a versioned question schema. Record requested and resolved versions;
+an unvalidated or mismatched version is not Active-eligible.
+
+The adapter resolves the returned ID by exact lookup. Guard validates schema,
+version, membership, requestability, user hard constraints and the calibrated
+confidence floor. Guard is deterministic and never selects another pair.
+
+These outcomes use the Fallback Baseline and retain distinct reasons:
+
+| Condition | Reason |
+| --- | --- |
+| Jev deadline exceeded | `jev_timeout` |
+| Jev transport or service failure | `jev_failure` |
+| Malformed answer | `invalid_choice` |
+| Requested/resolved version mismatch | `jev_version_mismatch` |
+| Confidence below the frozen floor | `low_confidence` |
+| Any deterministic Guard rejection | the specific Guard reason |
+
+## 7. Fallback Baseline
+
+The Fallback Baseline is a configured, fixed Candidate Pair proved
+requestable through the current caller edge. It is reliability handling, not a
+second selector. All fallback and bypass reasons in this policy execute that
+same pair.
+
+There is no policy default such as `Terra/medium`. OFF does not restore the
+virtual `jev/auto` request, a previous real model or an inferred host model.
+If the pair is unavailable, fail explicitly before output and do not switch
+provider or choose an unproved pair.
+
+## 8. Apply and authenticated execution
+
+Apply creates the upstream request by changing only:
+
+- `model`; and
+- `reasoning.effort`.
+
+Input, instructions, tools, tool-call and tool-result IDs, stream flag,
+metadata, service tier and all other semantics remain unchanged. The caller
+edge receives one request for a real model and performs upstream
+authentication without exposing those credentials to Jev.
+
+SSE status, relevant headers, events and order are forwarded as received; the
+first event must not wait for response completion or telemetry. Non-streaming
+JSON preserves upstream status, relevant headers and body. Observation runs
+off the response path.
+
+Cancellation or disconnect aborts the active Jev wait or upstream request and
+records cancellation. It does not trigger the Fallback Baseline. After any
+upstream output begins, a failure is returned as that call's failure; there is
+no model switch, replay or second upstream request.
+
+## 9. Observation
+
+Record three independent values:
+
+- `proposed_pair`: Jev's answer, if one existed;
+- `applied_pair`: the pair placed in the upstream request; and
+- `observed_pair`: the pair authoritatively reported upstream.
+
+Never backfill one from another. Unobserved model, effort, version, usage or
+cache facts are `UNKNOWN`, not zero. Also record mode, reason, eligible pairs,
+Jev/question/policy/caller-edge versions, latency, usage and terminal status.
+Raw request text, tool output and credentials are absent by default.
+
+Telemetry and Dashboard data are observation only. Usage, quota, credits,
+historical model mix and prior latency never select a route.
+
+## 10. Task evidence
+
+Per-call routing does not determine task completion. At the Main Task boundary,
+evaluate the original acceptance conditions from the delivered diff, tests and
+artifacts. Jev confidence and model self-report are not evidence.
+
+Active promotion requires the repeatable transport checks in the product
+specification. A savings claim additionally requires a paired comparison
+against the same Fallback Baseline under equivalent task state and acceptance,
+counting Jev, all model calls, cache behavior, retries, failures and
+verification. UNKNOWN usage cannot support the claim.
+
+## 11. Forbidden additions
+
+No local semantic classifier, task-kind table, tier ladder, second Choice,
+worker/capsule state machine, cache or price optimizer, online learning loop,
+quota bypass, external-provider fallback, response-content rewrite or replay
+after output belongs in this policy.

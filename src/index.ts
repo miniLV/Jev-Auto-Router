@@ -1,42 +1,128 @@
 import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
-import { DEFAULT_ROUTER_CONFIG, MemoryTelemetry, ResponsesProxy, type RouterConfig, type UpstreamResult } from "./proxy.js";
-import { DEFAULT_JEV_POLICY, type JevPolicy, type JevTransport, type JevTransportRequest } from "./jev-adapter.js";
-import { ModelDiscovery, type HostModelList } from "./discovery.js";
+import { readFile } from "node:fs/promises";
+import { BaselineUnavailableError, CallCancelledError, MemoryTelemetry, ResponsesProxy, type RouterConfig, type UpstreamResult } from "./proxy.js";
+import { DEFAULT_JEV_POLICY, isValidJevPolicyParameters, JevTimeoutError, MAX_JEV_DEADLINE_MS, type JevPolicy, type JevTransport, type JevTransportRequest } from "./jev-adapter.js";
+import { ModelDiscovery, parsePairProofManifest, type HostModelList } from "./discovery.js";
 import type { ModelCatalog } from "./catalog.js";
 import type { ResponsesRequest } from "./execution-contract.js";
-import { lunaBindingDefect, type ModelInfo } from "./catalog.js";
-import type { StepType } from "./types.js";
+import {
+  currentlyProvedEfforts,
+  currentEffortObservationGapCount,
+  deriveCandidateCatalogId,
+  lunaBindingDefect,
+  resolveBaseline,
+  type ModelEffortPair,
+} from "./catalog.js";
+import { validateActiveEvidence } from "./active-evidence.js";
+import { looksSensitive, QUESTION_SCHEMA_VERSION } from "./route-plan.js";
+import { AUTO_MODEL, parseStepType } from "./types.js";
 import type { VerificationEvidence } from "./verification.js";
+import { POLICY_VERSION } from "./receipt.js";
 
 /** Entry configuration: startup, host model discovery and a small config surface. */
 export interface EntryConfig extends RouterConfig {
   port: number;
   upstreamBaseUrl: string;
   jevEndpoint: string;
+  releaseId: string;
+  activeEvidenceFile?: string;
+  pairProofsFile?: string;
+  callerEdgeId: string;
+  candidateCatalogIdExpected?: string;
+}
+
+/**
+ * The Fallback Baseline is required configuration with no universal default
+ * (spec §3): it must name one caller-edge-proved pair explicitly.
+ */
+export function parseBaseline(value: string | undefined): { model: string; effort: string } {
+  if (!value) {
+    throw new Error("JEV_BASELINE must name the proved Fallback Baseline pair as <model>/<effort>");
+  }
+  const [model, effort, ...rest] = value.split("/");
+  if (!model || !effort || rest.length > 0) {
+    throw new Error(`JEV_BASELINE must be <model>/<effort>, got: ${value}`);
+  }
+  return { model, effort };
+}
+
+export function parseActiveCandidates(value: string | undefined): ModelEffortPair[] {
+  if (!value?.trim()) return [];
+  const pairs = value.split(",").map(entry => {
+    const [model, effort, ...rest] = entry.trim().split("/");
+    if (!model || !effort || rest.length > 0) {
+      throw new Error(`JEV_ACTIVE_CANDIDATES entries must be <model>/<effort>, got: ${entry}`);
+    }
+    return { model, effort };
+  });
+  const keys = pairs.map(pair => `${pair.model}/${pair.effort}`);
+  if (new Set(keys).size !== keys.length) throw new Error("JEV_ACTIVE_CANDIDATES must not repeat a model/effort pair");
+  return pairs;
 }
 
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): EntryConfig {
+  const baseline = parseBaseline(env.JEV_BASELINE);
+  const mode = env.JEV_MODE ?? "shadow";
+  if (mode !== "shadow" && mode !== "active") {
+    throw new Error(`JEV_MODE must be "shadow" or "active", got: ${env.JEV_MODE}`);
+  }
+  const routerOff = env.JEV_ROUTER_OFF === "1";
+  const activePolicyRequired = mode === "active" && !routerOff;
+  const confidenceFloor = policyNumber("JEV_CONFIDENCE_FLOOR", env.JEV_CONFIDENCE_FLOOR, DEFAULT_JEV_POLICY.confidenceFloor, activePolicyRequired);
+  const deadlineMs = policyNumber("JEV_DEADLINE_MS", env.JEV_DEADLINE_MS, DEFAULT_JEV_POLICY.deadlineMs, activePolicyRequired);
+  const policyParameters = { confidenceFloor, deadlineMs };
+  if (!isValidJevPolicyParameters(policyParameters)) {
+    throw new Error(`JEV_CONFIDENCE_FLOOR must be within 0..1 and JEV_DEADLINE_MS must be an integer from 1 to ${MAX_JEV_DEADLINE_MS}`);
+  }
   const policy: JevPolicy = {
     jevVersion: env.JEV_VERSION ?? DEFAULT_JEV_POLICY.jevVersion,
-    confidenceFloor: numberOrDefault(env.JEV_CONFIDENCE_FLOOR, DEFAULT_JEV_POLICY.confidenceFloor),
-    deadlineMs: numberOrDefault(env.JEV_DEADLINE_MS, DEFAULT_JEV_POLICY.deadlineMs),
+    ...policyParameters,
   };
-  const [baselineModel, baselineEffort] = (env.JEV_BASELINE ?? "gpt-5.6-terra/medium").split("/");
-  const [verificationModel, verificationEffort] = (env.JEV_VERIFICATION_TIER ?? "gpt-5.6-sol/medium").split("/");
-  const [infraModel, infraEffort] = (env.JEV_INFRA_PROFILE ?? "gpt-5.6-terra/medium").split("/");
+  const activeCandidates = parseActiveCandidates(env.JEV_ACTIVE_CANDIDATES);
+  const releaseId = env.JEV_RELEASE_ID ?? "UNKNOWN";
+  const activeEvidenceFile = env.JEV_ACTIVE_EVIDENCE_FILE;
+  const pairProofsFile = env.JEV_PAIR_PROOFS_FILE;
+  const callerEdgeId = env.JEV_CALLER_EDGE_ID ?? "UNKNOWN";
+  const candidateCatalogIdExpected = env.JEV_CANDIDATE_CATALOG_ID || undefined;
+  if (mode === "active" && !routerOff && activeCandidates.length === 0) {
+    throw new Error("JEV_ACTIVE_CANDIDATES must list exact approved <model>/<effort> pairs before Active routing");
+  }
+  if (mode === "active" && !routerOff) {
+    if (!activeEvidenceFile) throw new Error("JEV_ACTIVE_EVIDENCE_FILE must point to the paired-evaluation report before Active routing");
+    if (!releaseId || releaseId === "UNKNOWN") throw new Error("JEV_RELEASE_ID must match the evaluated runtime release before Active routing");
+    if (!callerEdgeId || callerEdgeId === "UNKNOWN") {
+      throw new Error("Active routing requires an explicit JEV_CALLER_EDGE_ID binding");
+    }
+  }
+  const upstreamBaseUrl = env.JEV_UPSTREAM_BASE_URL;
+  if (!upstreamBaseUrl) {
+    throw new Error("JEV_UPSTREAM_BASE_URL must name the authenticated, non-recursive caller edge; no direct upstream default exists");
+  }
   return {
-    ...DEFAULT_ROUTER_CONFIG,
-    routerOff: env.JEV_ROUTER_OFF === "1",
-    mode: env.JEV_MODE === "shadow" ? "shadow" : "active",
-    baseline: { model: baselineModel, effort: baselineEffort },
-    verificationTier: { model: verificationModel, effort: verificationEffort },
-    infrastructureProfile: { model: infraModel, effort: infraEffort },
+    routerOff,
+    mode,
+    baseline,
+    activeCandidates,
     policy,
     port: numberOrDefault(env.JEV_PORT, 8787),
-    upstreamBaseUrl: env.JEV_UPSTREAM_BASE_URL ?? "https://api.openai.com",
+    upstreamBaseUrl,
     jevEndpoint: env.JEV_ENDPOINT ?? "https://api.typesafe.ai/v1/systemone",
+    releaseId,
+    activeEvidenceFile,
+    pairProofsFile,
+    callerEdgeId,
+    candidateCatalogIdExpected,
   };
+}
+
+/** Resolve the runtime identity; the environment value can only pin an expectation. */
+export function currentCandidateCatalogId(config: EntryConfig, catalog: ModelCatalog, now = Date.now()): string {
+  const candidateCatalogId = deriveCandidateCatalogId(catalog, config.callerEdgeId, now);
+  if (config.candidateCatalogIdExpected !== undefined && config.candidateCatalogIdExpected !== candidateCatalogId) {
+    throw new Error("JEV_CANDIDATE_CATALOG_ID does not match the current proved candidate catalog");
+  }
+  return candidateCatalogId;
 }
 
 function numberOrDefault(value: string | undefined, fallback: number): number {
@@ -44,62 +130,183 @@ function numberOrDefault(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function policyNumber(name: string, value: string | undefined, fallback: number, required: boolean): number {
+  if (value === undefined) {
+    if (required) throw new Error(`${name} must be explicitly set before Active routing`);
+    return fallback;
+  }
+  if (!value.trim()) throw new Error(`${name} must be a finite number`);
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${name} must be a finite number`);
+  return parsed;
+}
+
 export function fetchJevTransport(endpoint: string, apiKey: string | undefined): JevTransport {
-  return async (request: JevTransportRequest, timeoutMs: number) => {
+  return async (request: JevTransportRequest, timeoutMs: number, signal?: AbortSignal) => {
     if (!apiKey) throw new Error("auth: JEV_API_KEY is not configured");
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(timeoutMs),
-      redirect: "error",
-    });
+    const timeout = AbortSignal.timeout(timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(request),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        redirect: "error",
+      });
+    } catch (error) {
+      // A deadline expiry is a Jev timeout (fallback with its reason); only a
+      // client-signal abort is a cancellation and keeps propagating.
+      if (error instanceof Error && error.name === "TimeoutError" && !signal?.aborted) {
+        throw new JevTimeoutError();
+      }
+      throw error;
+    }
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) throw new Error(`auth: ${response.status}`);
       if (response.status !== 429 && response.status < 500) throw new Error(`non_retryable: ${response.status}`);
       throw new Error(`http ${response.status}`);
     }
-    return (await response.json()) as { model?: string; choice?: string; confidence?: number; usage?: { input_tokens?: number; output_tokens?: number } };
+    const body = (await response.json()) as {
+      model?: string;
+      answers?: { route?: { type?: string; choice?: string; confidence?: number } };
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    return {
+      model: body.model,
+      choice: body.answers?.route?.type === "choice" ? body.answers.route.choice : undefined,
+      confidence: body.answers?.route?.confidence,
+      usage: body.usage,
+    };
   };
 }
 
-async function fetchUpstream(baseUrl: string, request: ResponsesRequest): Promise<UpstreamResult> {
+export async function fetchUpstream(baseUrl: string, request: ResponsesRequest, signal?: AbortSignal): Promise<UpstreamResult> {
   const response = await fetch(`${baseUrl}/v1/responses`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
+    signal,
   });
   if (!response.body) throw new Error("upstream returned no body");
+  const contentEncoding = response.headers.get("content-encoding")?.trim().toLowerCase();
+  const bodyWasDecoded = contentEncoding !== undefined && FETCH_DECODED_ENCODINGS.has(contentEncoding);
+  const headers: Record<string, string> = {};
+  for (const [name, value] of response.headers.entries()) {
+    const lowerName = name.toLowerCase();
+    if (HOP_BY_HOP.has(lowerName) || (bodyWasDecoded && DECODED_BODY_HEADERS.has(lowerName))) continue;
+    if (bodyWasDecoded && lowerName === "vary") {
+      const fields = value.split(",").map(field => field.trim()).filter(field => field.toLowerCase() !== "accept-encoding");
+      if (fields.length > 0) headers[name] = fields.join(", ");
+      continue;
+    }
+    headers[name] = value;
+  }
   return {
     status: response.status,
     contentType: response.headers.get("content-type") ?? "application/json",
+    headers,
     body: response.body,
   };
 }
 
-async function fetchModelList(baseUrl: string): Promise<HostModelList> {
+/** Build the proxy with the same caller-edge wiring used by the production entry point. */
+export function createProductionProxy(
+  config: EntryConfig,
+  catalog: ModelCatalog,
+  transport: JevTransport,
+  telemetry: MemoryTelemetry = new MemoryTelemetry(),
+): ResponsesProxy {
+  return new ResponsesProxy(
+    config,
+    catalog,
+    transport,
+    (request, signal) => fetchUpstream(config.upstreamBaseUrl, request, signal),
+    telemetry,
+  );
+}
+
+/** Content encodings transparently decoded by standard fetch in the supported Node runtime. */
+const FETCH_DECODED_ENCODINGS = new Set(["br", "deflate", "gzip", "x-gzip"]);
+
+/** Headers that describe encoded representation bytes rather than decoded content. */
+const DECODED_BODY_HEADERS = new Set([
+  "accept-ranges",
+  "content-digest",
+  "content-encoding",
+  "content-length",
+  "content-md5",
+  "content-range",
+  "digest",
+  "etag",
+  "repr-digest",
+]);
+
+/** Hop-by-hop headers are never relayed. */
+const HOP_BY_HOP = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+export async function fetchModelList(baseUrl: string): Promise<HostModelList> {
   const response = await fetch(`${baseUrl}/models`);
   if (!response.ok) throw new Error(`model list failed: ${response.status}`);
   const payload = (await response.json()) as { data?: Array<{ id: string; supported_efforts?: string[] }> };
   return {
-    source: `${baseUrl}/models`,
+    source: "authenticated-caller-edge:/models",
     models: (payload.data ?? []).map(entry => ({ model: entry.id, supported_efforts: entry.supported_efforts })),
   };
 }
 
+/** Optional restrictions used by the separate frozen-plan evaluation entry. */
+export interface RouterServerOptions {
+  allowedTaskIds?: ReadonlySet<string>;
+}
+
 /** Local-only operational surfaces: health and the decision log. Never a control plane. */
-export function createRouterServer(config: EntryConfig, catalog: ModelCatalog, proxy: ResponsesProxy): Server {
+export function createRouterServer(
+  config: EntryConfig,
+  catalog: ModelCatalog,
+  proxy: ResponsesProxy,
+  options: RouterServerOptions = {},
+): Server {
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    let responseStreamFailed = false;
     try {
       if (req.method === "GET" && url.pathname === "/health") {
+        const healthNow = Date.now();
+        const discoveredPairs = catalog.models.flatMap(model => model.supported_efforts.map(effort => `${model.model}/${effort}`));
+        const provedPairs = catalog.models.flatMap(model => currentlyProvedEfforts(model, healthNow).map(effort => `${model.model}/${effort}`));
         writeJson(res, 200, {
+          autoModel: AUTO_MODEL,
           routerOff: config.routerOff,
           mode: config.mode,
           jevVersion: config.policy.jevVersion,
+          policyVersion: POLICY_VERSION,
+          releaseId: config.releaseId,
+          callerEdgeId: config.callerEdgeId,
+          candidateCatalogId: deriveCandidateCatalogId(catalog, config.callerEdgeId, healthNow),
           baseline: config.baseline,
-          lunaBindingDefect: lunaBindingDefect(catalog) ?? null,
-          catalogSize: catalog.models.filter((m: ModelInfo) => m.requestable).length,
+          activeCandidates: config.activeCandidates,
+          baselineRequestable: resolveBaseline(catalog, config.baseline.model, config.baseline.effort, healthNow) !== undefined,
+          discoveredPairs,
+          provedPairs,
+          candidatePairs: provedPairs,
+          discoveryDigest: catalog.discoveryDigest,
+          proofManifestId: catalog.proofManifestId,
+          proofManifestDigest: catalog.proofManifestDigest,
+          proofExclusionCount: catalog.proofExclusions.length,
+          effortObservationGapCount: currentEffortObservationGapCount(catalog, healthNow),
+          lunaBindingDefect: lunaBindingDefect(catalog, healthNow) ?? null,
+          catalogSize: catalog.models.length,
+          provedModelCount: catalog.models.filter(model => currentlyProvedEfforts(model, healthNow).length > 0).length,
         });
         return;
       }
@@ -108,24 +315,52 @@ export function createRouterServer(config: EntryConfig, catalog: ModelCatalog, p
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/responses") {
-        const body = (await readJson(req)) as ResponsesRequest;
         // Control signals travel as headers so the forwarded body stays native.
-        const taskId = req.headers["x-jev-task-id"] ?? "default";
-        const step = (req.headers["x-jev-step"] as StepType | undefined) ?? "other";
+        const taskId = parseTaskIdHeader(req.headers["x-jev-task-id"]);
+        if (taskId === undefined) {
+          writeJson(res, 400, { error: "invalid_task_id" });
+          return;
+        }
+        if (options.allowedTaskIds && !options.allowedTaskIds.has(taskId)) {
+          writeJson(res, 403, { error: "task_not_in_frozen_plan" });
+          return;
+        }
+        const body = (await readJson(req)) as ResponsesRequest;
+        const step = parseStepType(header(req.headers["x-jev-step"]));
+        // Client disconnect aborts whichever Jev wait or upstream request is
+        // active; it never starts a fallback request (routing-policy §8).
+        const cancellation = new AbortController();
+        res.on("close", () => {
+          if (!res.writableEnded && !responseStreamFailed) cancellation.abort();
+        });
+        const userInput = step === "user_turn" && Array.isArray(body.input)
+          ? JSON.stringify(body.input)
+          : undefined;
         const result = await proxy.routeCall({
-          task_id: typeof taskId === "string" ? taskId : "default",
+          task_id: taskId,
           step_type: step,
           request: body,
           current_model: header(req.headers["x-jev-current-model"]),
+          // Shape-only user-turn fact: the native input is bucketed locally,
+          // and only the bucket ever leaves for Jev.
+          user_turn: userInput === undefined ? undefined : { request_text: userInput },
+          // Inspect user input locally for secrets; only its length bucket can
+          // enter Routing State, and the original body still passes to the edge.
+          raw_hints: userInput === undefined ? undefined : [userInput],
+          context_size_bucket: parseBucket(header(req.headers["x-jev-context-size-bucket"])),
           forced_model: header(req.headers["x-jev-forced-model"]),
-          gpt6_mandate: req.headers["x-jev-gpt6-mandate"] === "1",
-          competing_authority: req.headers["x-jev-competing-authority"] === "1",
+          astra_mandate: parseBooleanHeader(header(req.headers["x-jev-astra-mandate"])),
+          competing_authority: parseBooleanHeader(header(req.headers["x-jev-competing-authority"])),
+          signal: cancellation.signal,
         });
-        res.writeHead(result.upstream.status, {
+        const headers: Record<string, string> = {
+          ...result.upstream.headers,
           "content-type": result.upstream.contentType,
-          "x-jev-route": `${result.record.actual_model}:${result.record.actual_effort}`,
+          "x-jev-route": `${result.record.applied_model}:${result.record.applied_effort}`,
           "x-jev-route-source": result.record.route_source,
-        });
+        };
+        delete headers["content-length"];
+        res.writeHead(result.upstream.status, headers);
         await pipeline(Readable.fromWeb(result.upstream.body as never), res);
         return;
       }
@@ -138,14 +373,48 @@ export function createRouterServer(config: EntryConfig, catalog: ModelCatalog, p
       }
       writeJson(res, 404, { error: "not found" });
     } catch (error) {
+      if (error instanceof BaselineUnavailableError) {
+        writeJson(res, 502, { error: "baseline_unavailable", baseline: error.baseline });
+        return;
+      }
+      if (res.headersSent) {
+        responseStreamFailed = true;
+        if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
+        return;
+      }
+      if (error instanceof CallCancelledError || isClientAbort(error)) {
+        if (!res.writableEnded) res.destroy();
+        return;
+      }
       writeJson(res, 500, { error: error instanceof Error ? error.message : "internal error" });
     }
   });
 }
 
+function isClientAbort(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || (error as Error & { code?: string }).code === "ECONNRESET");
+}
+
 function header(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+/** Local task associations accept only bounded, printable identifier characters. */
+function parseTaskIdHeader(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return "default";
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value) && !looksSensitive(value)
+    ? value
+    : undefined;
+}
+
+function parseBucket(value: string | undefined): "small" | "medium" | "large" | undefined {
+  return value === "small" || value === "medium" || value === "large" ? value : undefined;
+}
+
+/** Only the documented wire values enable a boolean control. */
+function parseBooleanHeader(value: string | undefined): boolean | undefined {
+  return value === "1" ? true : value === "0" ? false : undefined;
 }
 
 function writeJson(res: import("node:http").ServerResponse, status: number, payload: unknown): void {
@@ -170,26 +439,51 @@ function readJson(req: import("node:http").IncomingMessage): Promise<unknown> {
 }
 
 async function pipeline(source: Readable, res: import("node:http").ServerResponse): Promise<void> {
-  await Promise.all([
-    new Promise<void>((resolve, reject) => {
-      source.on("error", reject);
-      res.on("close", resolve);
-      source.pipe(res);
-      source.on("end", resolve);
-    }),
-  ]).catch(() => {
-    if (!res.writableEnded) res.end();
+  await new Promise<void>((resolve, reject) => {
+    source.on("error", reject);
+    res.on("close", resolve);
+    source.pipe(res);
+    source.on("end", resolve);
   });
 }
 
-export async function main(): Promise<void> {  const config = configFromEnv();
+export async function main(): Promise<void> {
+  const config = configFromEnv();
   const discovery = new ModelDiscovery();
-  const catalog = await discovery.discover("entry", () => fetchModelList(config.upstreamBaseUrl), Date.now());
+  const proofManifest = config.pairProofsFile
+    ? parsePairProofManifest(JSON.parse(await readFile(config.pairProofsFile, "utf8")) as unknown)
+    : undefined;
+  const catalogNow = Date.now();
+  const catalog = await discovery.discover("entry", () => fetchModelList(config.upstreamBaseUrl), proofManifest, config.callerEdgeId, catalogNow);
+  const candidateCatalogId = currentCandidateCatalogId(config, catalog, catalogNow);
+  if (!resolveBaseline(catalog, config.baseline.model, config.baseline.effort, catalogNow)) {
+    process.stdout.write(
+      `warning: configured baseline ${config.baseline.model}/${config.baseline.effort} has no current caller-edge proof; jev/auto calls will fail closed\n`,
+    );
+  }
+  const unavailableCandidates = config.activeCandidates.filter(pair => !resolveBaseline(catalog, pair.model, pair.effort, catalogNow));
+  if (config.activeCandidates.length > 0 && !config.routerOff && unavailableCandidates.length) {
+    throw new Error(`JEV_ACTIVE_CANDIDATES are not requestable through the current caller edge: ${unavailableCandidates.map(pair => `${pair.model}/${pair.effort}`).join(",")}`);
+  }
+  if (config.mode === "active" && !config.routerOff) {
+    const report = JSON.parse(await readFile(config.activeEvidenceFile!, "utf8")) as unknown;
+    await validateActiveEvidence(report, {
+      releaseId: config.releaseId,
+      baseline: config.baseline,
+      activeCandidates: config.activeCandidates,
+      callerEdgeId: config.callerEdgeId,
+      candidateCatalogId,
+      jevVersion: config.policy.jevVersion,
+      runtimePolicy: config.policy,
+      policyVersion: POLICY_VERSION,
+      questionSchemaVersion: QUESTION_SCHEMA_VERSION,
+    }, config.activeEvidenceFile!);
+  }
   const transport = fetchJevTransport(config.jevEndpoint, process.env.JEV_API_KEY);
-  const proxy = new ResponsesProxy(config, catalog, transport, request => fetchUpstream(config.upstreamBaseUrl, request), new MemoryTelemetry());
+  const proxy = createProductionProxy(config, catalog, transport, new MemoryTelemetry());
   const server = createRouterServer(config, catalog, proxy);
   server.listen(config.port, "127.0.0.1", () => {
-    process.stdout.write(`jev-auto-router listening on http://127.0.0.1:${config.port}\n`);
+    process.stdout.write(`jev-auto-router listening on http://127.0.0.1:${config.port} (mode=${config.mode}, baseline=${config.baseline.model}/${config.baseline.effort})\n`);
   });
   const stop = (): void => {
     server.close(() => process.exit(0));

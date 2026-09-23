@@ -1,40 +1,72 @@
-import { UNKNOWN, addUsage, type Mode, type RouteSource, type StepType, type TokenUsage, type Usage } from "./types.js";
-import type { ObservedExecution } from "./execution-contract.js";
+import { UNKNOWN, addUsage, type CallStatus, type EntryKind, type Mode, type RouteReason, type RouteSource, type StepType, type TokenUsage, type Usage } from "./types.js";
+import { hasPinnedJevVersion, isPinnedJevVersion } from "./jev-adapter.js";
+import type { ObservedExecution, RouteObservation } from "./execution-contract.js";
 import type { JevDecision } from "./route-plan.js";
+import type { GuardReason } from "./policy-guard.js";
 import type { TaskState, VerificationResult } from "./verification.js";
 
 /**
  * Per-call and per-task records (Router Compass input). Records are
- * evidence, never routing authority. Raw prompts and tool-output text
- * never enter records; digests only.
+ * evidence, never routing authority. The three pair columns — proposed,
+ * applied, observed — are independent facts and are never backfilled from
+ * one another (spec §8). Raw prompts and tool-output text never enter
+ * records; digests only.
  */
 export interface CallRecord {
   task_id: string;
   call_index: number;
   step_type: StepType;
+  entry: EntryKind;
   mode: Mode;
   policy_version: string;
   question_schema_version: string;
   jev_requested_version: string | "UNKNOWN";
   jev_resolved_version: string | "UNKNOWN";
+  jev_confidence_floor: number | "UNKNOWN";
+  jev_deadline_ms: number | "UNKNOWN";
   eligible_pairs: string[];
-  jev_choice?: string;
-  confidence?: number;
-  actual_model: string;
-  actual_effort: string;
+  /** Jev's answer, if one existed. */
+  proposed_pair_id?: string;
+  proposed_model: string | "UNKNOWN";
+  proposed_effort: string | "UNKNOWN";
+  jev_confidence?: number;
+  /** Jev's Choice result is separate from the route reason used for execution. */
+  jev_choice_result?: JevChoiceResult;
+  /** Only bounded adapter classifications are persisted; raw errors never are. */
+  jev_failure_subreason?: JevFailureSubreason;
+  guard_verdict?: "allow" | "deny";
+  guard_reason?: GuardReason;
+  original_model: string;
+  /** The pair placed in the upstream request; UNKNOWN when none was sent. */
+  applied_model: string | "UNKNOWN";
+  applied_effort: string | "UNKNOWN";
+  /** What the upstream response authoritatively reports; UNKNOWN until then. */
+  observed_model: string | "UNKNOWN";
+  observed_effort: string | "UNKNOWN";
+  observation: RouteObservation | "pending";
   route_source: RouteSource;
-  fallback_reason?: string;
-  gpt6_eligibility_reason?: string;
+  reason?: RouteReason;
+  astra_eligibility_reason?: string;
   jev_input_tokens: Usage;
   jev_output_tokens: Usage;
   jev_latency_ms: number;
+  /** HTTP and first-output evidence from the caller-edge response. */
+  upstream_http_status: number | "UNKNOWN";
+  upstream_started_at: string | "UNKNOWN";
+  first_output_delta_at: string | "UNKNOWN";
+  time_to_first_output_delta_ms: Usage;
+  response_completed_at: string | "UNKNOWN";
+  upstream_completion_ms: Usage;
+  /** Stable digests link tool calls to later results without storing raw IDs. */
+  response_tool_call_refs: string[];
+  request_tool_result_refs: string[];
   model_input_tokens: Usage;
   model_cached_tokens: Usage;
   model_cache_write_tokens: Usage;
   model_output_tokens: Usage;
   model_reasoning_tokens: Usage;
   model_latency_ms: number;
-  call_status: "ok" | "error" | "cancelled";
+  call_status: CallStatus;
 }
 
 export interface TaskRecord {
@@ -53,16 +85,92 @@ export interface CallRecordInput {
   task_id: string;
   call_index: number;
   step_type: StepType;
+  entry: EntryKind;
   mode: Mode;
+  jevConfidenceFloor?: number;
+  jevDeadlineMs?: number;
   decision?: JevDecision;
   eligiblePairs: string[];
-  selectedPair: { model: string; effort: string };
+  /** Resolved proposed pair; the raw pair_id is always kept separately. */
+  proposedPair?: { model: string; effort: string };
+  guardVerdict?: "allow" | "deny";
+  guardReason?: GuardReason;
+  appliedPair?: { model: string; effort: string };
+  originalModel: string;
   route_source: RouteSource;
-  fallback_reason?: string;
-  gpt6_eligibility_reason?: string;
+  reason?: RouteReason;
+  astra_eligibility_reason?: string;
+  /** Present when the response has already been scanned (tests, harnesses). */
   observed?: ObservedExecution;
+  upstream_http_status?: number;
+  upstream_started_at?: string;
+  first_output_delta_at?: string;
+  time_to_first_output_delta_ms?: Usage;
+  response_completed_at?: string;
+  upstream_completion_ms?: Usage;
+  response_tool_call_refs?: string[];
+  request_tool_result_refs?: string[];
   model_latency_ms: number;
-  call_status: CallRecord["call_status"];
+  call_status: CallStatus;
+}
+
+export type JevChoiceResult =
+  | "choice_accepted"
+  | "jev_timeout"
+  | "jev_failure"
+  | "invalid_choice"
+  | "low_confidence"
+  | "jev_version_mismatch";
+
+const JEV_FAILURE_SUBREASONS = [
+  "deadline_exhausted",
+  "auth",
+  "rate_limited",
+  "non_retryable",
+  "network",
+  "empty_candidate_set",
+  "version_drift",
+  "version_missing",
+  "version_unpinned",
+  "unknown_pair_id",
+  "invalid_confidence",
+  "low_confidence",
+  "other",
+] as const;
+
+export type JevFailureSubreason = typeof JEV_FAILURE_SUBREASONS[number];
+
+function jevVersionFailureSubreason(decision: JevDecision): "version_drift" | "version_missing" | "version_unpinned" {
+  if (decision.jev_resolved_version === UNKNOWN) return "version_missing";
+  if (!isPinnedJevVersion(decision.jev_requested_version)) return "version_unpinned";
+  return "version_drift";
+}
+
+function jevChoiceResultOf(decision: JevDecision | undefined, guardReason?: GuardReason): JevChoiceResult | undefined {
+  if (!decision) return undefined;
+  if (guardReason === "VERSION_DRIFT" || (decision.valid && !hasPinnedJevVersion(decision.jev_requested_version, decision.jev_resolved_version))) {
+    return "jev_version_mismatch";
+  }
+  if (decision.valid) return "choice_accepted";
+  switch (decision.failure_reason) {
+    case "timeout": return "jev_timeout";
+    case "transport": return "jev_failure";
+    case "floor": return "low_confidence";
+    case "malformed":
+      return decision.failure_subreason === "version_drift" ? "jev_version_mismatch" : "invalid_choice";
+    default: return undefined;
+  }
+}
+
+function jevFailureSubreasonOf(decision: JevDecision | undefined, guardReason?: GuardReason): JevFailureSubreason | undefined {
+  if (decision && (guardReason === "VERSION_DRIFT" || (decision.valid && !hasPinnedJevVersion(decision.jev_requested_version, decision.jev_resolved_version)))) {
+    return jevVersionFailureSubreason(decision);
+  }
+  const subreason = decision?.failure_subreason;
+  if (subreason === undefined) return undefined;
+  return JEV_FAILURE_SUBREASONS.includes(subreason as JevFailureSubreason)
+    ? subreason as JevFailureSubreason
+    : "other";
 }
 
 export function buildCallRecord(input: CallRecordInput): CallRecord {
@@ -71,22 +179,43 @@ export function buildCallRecord(input: CallRecordInput): CallRecord {
     task_id: input.task_id,
     call_index: input.call_index,
     step_type: input.step_type,
+    entry: input.entry,
     mode: input.mode,
     policy_version: POLICY_VERSION,
     question_schema_version: decision?.question_schema_version ?? "UNKNOWN",
     jev_requested_version: decision?.jev_requested_version ?? "UNKNOWN",
     jev_resolved_version: decision?.jev_resolved_version ?? "UNKNOWN",
+    jev_confidence_floor: input.jevConfidenceFloor ?? UNKNOWN,
+    jev_deadline_ms: input.jevDeadlineMs ?? UNKNOWN,
     eligible_pairs: input.eligiblePairs,
-    jev_choice: decision?.chosen_pair_id,
-    confidence: decision?.confidence,
-    actual_model: input.observed?.actual_model ?? input.selectedPair.model,
-    actual_effort: input.observed?.actual_effort ?? input.selectedPair.effort,
+    proposed_pair_id: decision?.chosen_pair_id,
+    proposed_model: input.proposedPair?.model ?? UNKNOWN,
+    proposed_effort: input.proposedPair?.effort ?? UNKNOWN,
+    jev_confidence: decision?.confidence,
+    jev_choice_result: jevChoiceResultOf(decision, input.guardReason),
+    jev_failure_subreason: jevFailureSubreasonOf(decision, input.guardReason),
+    guard_verdict: input.guardVerdict,
+    guard_reason: input.guardReason,
+    original_model: input.originalModel,
+    applied_model: input.appliedPair?.model ?? UNKNOWN,
+    applied_effort: input.appliedPair?.effort ?? UNKNOWN,
+    observed_model: input.observed?.actual_model ?? UNKNOWN,
+    observed_effort: input.observed?.actual_effort ?? UNKNOWN,
+    observation: input.observed?.observation ?? "pending",
     route_source: input.route_source,
-    fallback_reason: input.fallback_reason,
-    gpt6_eligibility_reason: input.gpt6_eligibility_reason,
+    reason: input.reason,
+    astra_eligibility_reason: input.astra_eligibility_reason,
     jev_input_tokens: decision?.jev_usage.input_tokens ?? UNKNOWN,
     jev_output_tokens: decision?.jev_usage.output_tokens ?? UNKNOWN,
     jev_latency_ms: decision?.jev_latency_ms ?? 0,
+    upstream_http_status: input.upstream_http_status ?? UNKNOWN,
+    upstream_started_at: input.upstream_started_at ?? UNKNOWN,
+    first_output_delta_at: input.first_output_delta_at ?? UNKNOWN,
+    time_to_first_output_delta_ms: input.time_to_first_output_delta_ms ?? UNKNOWN,
+    response_completed_at: input.response_completed_at ?? UNKNOWN,
+    upstream_completion_ms: input.upstream_completion_ms ?? UNKNOWN,
+    response_tool_call_refs: input.response_tool_call_refs ?? [],
+    request_tool_result_refs: input.request_tool_result_refs ?? [],
     model_input_tokens: input.observed?.usage.input_tokens ?? UNKNOWN,
     model_cached_tokens: input.observed?.usage.cached_input_tokens ?? UNKNOWN,
     model_cache_write_tokens: input.observed?.usage.cache_write_input_tokens ?? UNKNOWN,
@@ -131,7 +260,7 @@ export interface CompassDiagnostics {
   latency_ms: number[];
   tier_call_share: Record<string, number>;
   cache_hit_ratio: number | "UNKNOWN";
-  gpt6_usage_rate: number | "UNKNOWN";
+  astra_usage_rate: number | "UNKNOWN";
 }
 
 export interface PriceTable {
@@ -150,7 +279,8 @@ function rate(numerator: number, denominator: number): number | "UNKNOWN" {
 /**
  * Aggregates records. Any UNKNOWN usage in an aggregate makes that aggregate
  * UNKNOWN — never zero. Route sources are kept separate so no fallback is
- * attributed to Jev and no bypass is counted as a routing win.
+ * attributed to Jev and no bypass is counted as a routing win. Aggregates
+ * read the observed column only; unobserved calls stay UNKNOWN.
  */
 export function compass(callRecords: CallRecord[], taskRecords: TaskRecord[], prices: PriceTable): {
   metrics: CompassMetrics;
@@ -165,7 +295,7 @@ export function compass(callRecords: CallRecord[], taskRecords: TaskRecord[], pr
   let totalCost: Usage = 0;
   let jevCost: Usage = 0;
   for (const call of callRecords) {
-    const price = prices[call.actual_model];
+    const price = call.observed_model === UNKNOWN ? undefined : prices[call.observed_model];
     if (price && call.model_input_tokens !== UNKNOWN && call.model_output_tokens !== UNKNOWN) {
       const cost =
         (call.model_input_tokens / 1e6) * price.input +
@@ -182,27 +312,31 @@ export function compass(callRecords: CallRecord[], taskRecords: TaskRecord[], pr
     }
   }
 
-  const frontierCalls = callRecords.filter(c => c.actual_model.includes("sol") || c.actual_model.includes("gpt-6"));
+  const frontierCalls = callRecords.filter(c =>
+    c.observed_model !== UNKNOWN && (c.observed_model.includes("sol") || c.observed_model.includes("gpt-6")));
   const frontierTokens = sum(frontierCalls.map(callFrontierTokens));
 
   let switches = 0;
-  let byTask = new Map<string, string | undefined>();
+  const byTask = new Map<string, string | undefined>();
   for (const call of [...callRecords].sort((a, b) => a.call_index - b.call_index)) {
     const previous = byTask.get(call.task_id);
-    if (previous !== undefined && previous !== call.actual_model) switches += 1;
-    byTask.set(call.task_id, call.actual_model);
+    // UNKNOWN observations never assert a switch or a stay.
+    if (call.observed_model === UNKNOWN) continue;
+    if (previous !== undefined && previous !== call.observed_model) switches += 1;
+    byTask.set(call.task_id, call.observed_model);
   }
 
   const tierShare: Record<string, number> = {};
   for (const call of callRecords) {
-    const tier = call.actual_model.includes("luna")
-      ? "luna_max"
-      : call.actual_model.includes("terra")
-        ? "terra"
-        : call.actual_model.includes("sol")
+    const model = call.observed_model;
+    const tier = model === UNKNOWN
+      ? "unknown"
+      : model.includes("luna")
+        ? "luna_max"
+        : model.includes("sol")
           ? "sol"
-          : call.actual_model.includes("gpt-6")
-            ? "gpt6"
+          : model.includes("gpt-6")
+            ? "astra"
             : "other";
     tierShare[tier] = (tierShare[tier] ?? 0) + 1;
   }
@@ -234,7 +368,7 @@ export function compass(callRecords: CallRecord[], taskRecords: TaskRecord[], pr
         inputTotal === UNKNOWN || cachedTotal === UNKNOWN || (inputTotal as number) === 0
           ? "UNKNOWN"
           : (cachedTotal as number) / (inputTotal as number),
-      gpt6_usage_rate: rate(tierShare.gpt6 ?? 0, callRecords.length),
+      astra_usage_rate: rate(tierShare.astra ?? 0, callRecords.length),
     },
   };
 }

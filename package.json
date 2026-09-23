@@ -10,6 +10,9 @@
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/test/*.test.js",
+    "bench:jev-smoke": "npm run build && node dist/bench/jev-smoke.js",
+    "bench:active-evaluation": "npm run build && node dist/bench/controlled-active.js",
+    "bench:evaluate": "npm run build && node dist/bench/evaluate.js",
     "dashboard": "node dist/src/index.js",
     "release": "node scripts/release.mjs",
     "start": "node dist/src/index.js"

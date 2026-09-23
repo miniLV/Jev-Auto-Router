@@ -1,5 +1,8 @@
 # Capability catalog: model/effort availability
 
+> Legacy prototype design; superseded by the caller-edge-proved Candidate Pair
+> contract in [Scheme A](../solution.md). It is not a runtime contract.
+
 This module reports which `(model, reasoning_effort)` pairs the host can
 actually request now. It enumerates valid pairs; it never ranks them,
 assigns them task types or infers fitness.
@@ -11,7 +14,7 @@ ModelCatalog {
   discovered_via,                  // trusted host model/list surface
   models[]: {
     model,                         // concrete identifier
-    tier?: luna_max | terra | sol | gpt6,
+    tier?: luna_max | sol | astra,
     supported_efforts[],
     requestable: boolean           // trusted surface accepts it now
   },
@@ -25,7 +28,7 @@ ModelCatalog {
   config or listing without a requestable surface is **DISCOVERED only**
   and produces no pairs.
 - Tier-to-model bindings are resolved once per session and recorded;
-  `luna_max` binds to `gpt-5.6-luna` + `max`. If `max` is not a distinct
+  `luna_max` binds to `gpt-6-luna` + `max`. If `max` is not a distinct
   requestable effort, the catalog must expose the actually supported pairs
   and the product naming must be corrected — a tier name never implies an
   unrequestable effort.
@@ -37,7 +40,7 @@ ModelCatalog {
 
 A pair enters the candidate set iff the model is requestable **and** the
 effort is in its supported list, and no hard constraint excludes it (tier
-disabled, user-forced model, GPT-6 gate). Exclusions are recorded with a
+disabled, user-forced model, Astra gate). Exclusions are recorded with a
 stable reason. Deduplicate equivalent pairs and hash the set for the
 decision record.
 

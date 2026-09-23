@@ -3,7 +3,10 @@ export const UNKNOWN = "UNKNOWN";
 export type Unknown = typeof UNKNOWN;
 export type Usage = number | Unknown;
 
-export type Tier = "luna_max" | "terra" | "sol" | "gpt6";
+export type Tier = "luna_max" | "sol" | "astra";
+
+/** The only virtual model that enters automatic routing (spec §2). */
+export const AUTO_MODEL = "jev/auto";
 
 export type StepType =
   | "user_turn"
@@ -13,32 +16,50 @@ export type StepType =
   | "other"
   | "infrastructure";
 
+const STEP_TYPES: readonly StepType[] = [
+  "user_turn",
+  "tool_step",
+  "correction",
+  "verification",
+  "other",
+  "infrastructure",
+];
+
+export function parseStepType(value: unknown): StepType {
+  return typeof value === "string" && STEP_TYPES.includes(value as StepType)
+    ? value as StepType
+    : "other";
+}
+
 export type Mode = "active" | "shadow" | "bypass";
 
 export type RouteSource = "jev" | "fallback" | "bypass";
 
-export type FallbackReason =
-  | "low_confidence"
-  | "timeout"
-  | "malformed"
-  | "transport"
-  | "guard_deny"
-  | "baseline_unavailable"
-  | "privacy_refusal"
-  | "router_off"
-  | "infrastructure"
-  | "verification_fixed"
-  | "forced_model"
-  | "jev_skipped_for_task";
+/** How the call entered the router (spec §2 entry boundary). */
+export type EntryKind = "auto" | "manual" | "out_of_policy";
 
-export type BypassReason =
+/**
+ * Exact recorded reasons (routing-policy §3/§6). Every fallback and bypass
+ * keeps a distinct reason; the Fallback Baseline executes all of them.
+ */
+export type RouteReason =
+  // Pre-Jev fallback conditions
   | "router_off"
+  | "shadow_mode"
   | "infrastructure"
-  | "verification_fixed"
-  | "forced_model"
+  | "competing_authority"
   | "privacy_refusal"
-  | "jev_skipped_for_task"
-  | "competing_authority";
+  | "insufficient_routing_facts"
+  | "jev_version_mismatch"
+  // Jev answer conditions
+  | "jev_timeout"
+  | "jev_failure"
+  | "invalid_choice"
+  | "low_confidence"
+  | "guard_deny"
+  // Entry bypass (no routing at all)
+  | "manual_model"
+  | "out_of_policy_entry";
 
 export type CallStatus = "ok" | "error" | "cancelled";
 

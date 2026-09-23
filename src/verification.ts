@@ -74,7 +74,7 @@ export type TakeoverTrigger =
   | "scope_runaway"
   | "permission_problem"
   | "unclear_identity"
-  | "gpt6_avoided_when_necessary";
+  | "astra_avoided_when_necessary";
 
 export interface TaskState {
   task_id: string;
@@ -83,8 +83,8 @@ export interface TaskState {
   takeover?: TakeoverTrigger;
   /** Bounded failure facts returned to the same session for correction. */
   failure_facts?: { failing_item_ids: string[] };
-  /** One-shot GPT-6 eligibility: cleared after use or resolution. */
-  gpt6_eligibility?: { reason_code: string; evidence_ref: string };
+  /** One-shot Astra eligibility: cleared after use or resolution. */
+  astra_eligibility?: { reason_code: string; evidence_ref: string };
   /** Tracks defects for the immediate repeated-defect takeover. */
   seen_defect_ids: string[];
 }
@@ -143,14 +143,14 @@ export function immediateTakeover(task: TaskState, trigger: TakeoverTrigger): Ta
  * for the next call targeting that blocker. It is consumed by use or
  * cleared by resolution; it never persists across routine calls.
  */
-export function openGpt6Eligibility(task: TaskState, reason_code: string, evidence_ref: string): TaskState {
-  if (task.gpt6_eligibility) return task;
-  return { ...task, gpt6_eligibility: { reason_code, evidence_ref } };
+export function openAstraEligibility(task: TaskState, reason_code: string, evidence_ref: string): TaskState {
+  if (task.astra_eligibility) return task;
+  return { ...task, astra_eligibility: { reason_code, evidence_ref } };
 }
 
-export function consumeGpt6Eligibility(task: TaskState): TaskState {
-  if (!task.gpt6_eligibility) return task;
+export function consumeAstraEligibility(task: TaskState): TaskState {
+  if (!task.astra_eligibility) return task;
   const next = { ...task };
-  delete next.gpt6_eligibility;
+  delete next.astra_eligibility;
   return next;
 }
