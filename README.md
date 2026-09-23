@@ -4,11 +4,14 @@
 
 架构中，Jev 负责每次调用的模型与推理档位选择；本地 Responses 代理负责保持 Codex 会话和工具循环连续；任务结束后独立验收。Router Compass 把选路、实际用量和验收结果放在一起，回答一个问题：**少用旗舰模型之后，任务是否仍然正确完成，整体开销是否真的下降？**
 
+当前模型阵容为 **GPT-6 三档**：`gpt-6-luna`（Luna Max，高强度推理）、`gpt-6-sol`（常规主力，并承担固定回退基线角色）、`gpt-6-astra`（默认不在候选中，仅在证据或用户指令准入时进入）。
+
 > [!IMPORTANT]
-> **当前状态：方案 A 契约已定，运行时正在迁移。** 已有真实 Codex
-> A→B→A 摘要支持跨模型延续、认证、工具结果 ID 延续和完成前的 HTTP
-> 流式输出；effort 一致性、取消、压缩、版本归档和可重跑记录仍待补齐。
-> 请勿把下面的设计当作已经可投入生产的安装说明。
+> **当前状态：方案 A 运行时已实现，真实实机证据仍在补齐。** 固定基线
+> 链路、Shadow、受控 Active、取消传播、pair 证明目录与配对评估门禁已
+> 落地并通过确定性 HTTP 测试；可重跑的实机 A→B→A、独立取消、压缩续跑
+> 与真实配对评估发布结论（本地 ticket 21–25）尚未完成。请勿把下面的
+> 说明当作已经可投入生产的安装指南。
 
 [English](README.en.md) · [架构方案](docs/solution.md) · [架构决策 ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [中文文章](https://minilv.github.io/2026/09/18/codex-auto-router/) · [许可证](LICENSE)
 
@@ -16,8 +19,9 @@
 
 - **TypeSafe 账号与 Jev API key。** 按 [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart) 从控制台获取密钥。当前代理调用 Jev 时读取环境变量 `JEV_API_KEY`；TypeSafe 官方示例使用 `TYPESAFE_API_KEY`，两者可以设置为同一密钥。不要将密钥提交到仓库。
 - **Node.js 22+、已登录的 Codex CLI，以及宿主实际可请求的模型与推理档位。** 仅有 Jev 密钥不足以运行真实的逐调用路由。
-- **目前是验证原型。** 现有摘要仍须补成可重跑的实机证据，且运行时代码
-  尚待后续 ticket 迁移到方案 A；尚无开箱即用的生产安装流程。
+- **目前是验证原型。** 运行时已按方案 A 实现并通过确定性测试，但真实
+  caller-edge 证明资产、可重跑实机会话与配对评估结论仍待补齐；尚无
+  开箱即用的生产安装流程。
 
 本地运行代理前，把 TypeSafe 控制台获取的密钥放进当前 shell：
 
@@ -29,11 +33,9 @@ export JEV_API_KEY="<your-typesafe-jev-api-key>"
 
 一个编码任务既有理解需求、排查复杂故障的高强度推理，也有读取文件、执行已知修改、跟进工具结果的常规调用。整段任务固定使用旗舰模型，会让简单调用占用昂贵能力；整段任务固定使用轻量模型，又可能拖累困难环节。
 
-Jev Auto Router 把选择点放在**每次有意义的模型调用**上，而不是为每个任务启动一个新 worker。例如，同一个会话可以由 Sol 理清问题，Luna Max 执行明确的后续步骤，Terra 处理一般实现问题，再由 Sol 分析失败测试。这个序列仅用于说明路由粒度，不代表实测效果。
+Jev Auto Router 把选择点放在**每次有意义的模型调用**上，而不是为每个任务启动一个新 worker。例如，同一个会话可以由 Sol 理清问题，Luna Max 处理高强度推理，Sol 继续常规实现与工具跟进，Astra 只在出现经验证的推理阻碍时经一次性准入进入。这个序列仅用于说明路由粒度，不代表实测效果。
 
 ## 核心闭环
-
-[方案 A 可视化技术设计](tech-design.html)
 
 ```text
 Codex Responses(model=jev/auto)
@@ -54,6 +56,33 @@ Codex Router ── 真实模型请求 → 正常通道（绕过 Jev）
 已认证且不递归的 caller edge ──► 原生 SSE / JSON 立即返回 Codex
 ```
 
+### 系统拓扑
+
+<p align="center">
+  <img src="docs/assets/jev-topology.png" alt="系统拓扑：Codex CLI、Codex Router、Jev Router、认证 caller edge 与 GPT 模型的主链路，TypeSafe Jev 作为路由决策支线" width="880">
+</p>
+
+主线只处理 Codex 原生 Responses 请求；Jev 是路由决策支线，只接收白名单事实与候选组合，不接触上游认证凭据。虚拟模型入口（`jev/auto`）与认证 caller edge 必须分开，避免递归转发；用户内容只通过本地代理到达原本要调用的 GPT 上游。完整设计见[方案 A 可视化技术设计](tech-design.html)。
+
+### 交互时序
+
+<p align="center">
+  <img src="docs/assets/jev-sequence.png" alt="Codex、Codex Router、Jev Router、TypeSafe Jev 与 caller edge 的逐调用交互时序图" width="880">
+</p>
+
+Jev 不成为 Codex 的执行模型：它只在上游模型调用之前给本地路由器一个受约束的选择。响应不等待整段生成完成即回传；观测模块旁路读取完成事件，观测失败不阻断或改写 Codex 收到的响应。回退只在发出上游请求之前决定；上游已经开始输出后的故障如实上报，不在同一调用上自动换模重放。
+
+### 六个模块
+
+| 模块 | 职责 | 输出 |
+| --- | --- | --- |
+| M1 · 请求接入 | 接收 Responses 请求，识别会话、调用类型、用户指定模型与基础设施调用 | CallContext + 原生请求 |
+| M2 · 候选与隐私 | 从实测可请求清单生成候选组合；应用用户硬约束；只提取白名单路由事实 | RoutingFacts + CandidatePairs |
+| M3 · 一次 Jev Choice | 固定版本、固定问题模板，一次有截止时间的调用 | ProposedPair 或失败原因 |
+| M4 · Guard + Apply | 校验候选成员、可用性、约束与置信度；只改 `model` 与 `reasoning.effort` | AppliedRequest + RouteSource |
+| M5 · 认证与流转发 | 调用已验证 caller edge；响应字节边到边转发；取消同步传上游 | 原生 SSE / JSON 响应 |
+| M6 · 被动观测 | 分列记录提议、应用与上游实际组合；缺失值标 UNKNOWN，不记录原文 | 每次调用的审计记录 |
+
 ### Jev 做什么
 
 - 路由器只构建当前认证 caller edge **已经实测可请求**的
@@ -62,14 +91,17 @@ Codex Router ── 真实模型请求 → 正常通道（绕过 Jev）
 - 发给 Jev 的是经过发送资格检查的紧凑状态，例如当前步骤、工具错误摘要和当前模型。完整会话仍走 Codex 原生模型调用；原始 prompt 和工具输出默认不写入路由日志。
 - 生产路由使用经过验证的 Jev 固定版本。OFF、隐私拒绝、信息不足、
   超时、低置信或无效回答都使用同一个已实测固定基线，并留下各自原因；
-  没有产品级 `Terra/medium` 默认值。用户选择真实模型时始终绕过 Jev。
+  没有产品级默认组合。用户选择真实模型时始终绕过 Jev。
+- **Astra 准入是稀缺资源。** `gpt-6-astra` 默认不在候选中；只有经验证
+  的推理阻碍证据开启的一次性资格（用后即耗尽），或用户明确指令
+  （`x-jev-astra-mandate`）才让它进入本次调用。普通失败不产生持久资格。
 
 ### 候选组合
 
 候选项是精确的 `(model, reasoning_effort)` 对，不是品牌档位。只有在
 当前 caller edge 上实际请求成功、满足能力与用户硬约束的组合才能进入
-Choice；模型选择器或目录中可见不等于可执行。增加或变更候选需要重新走
-Shadow 与传输验证。
+Choice；模型选择器或目录中可见不等于可执行。当前 tier 为
+`luna_max` / `sol` / `astra`。增加或变更候选需要重新走 Shadow 与传输验证。
 
 ## 什么数据去哪里
 
@@ -92,10 +124,13 @@ Router Compass 记录每次调用的 Jev 选择、实际模型与档位、用量
 
 ## 当前进度与体验
 
-当前仓库提供旧代理实现与测试。方案 A 的文档契约已迁移；后续 ticket
-会依次实现固定基线链路、Shadow、Active、故障/取消、可重跑实机证据和
-配对评估。通过这些验证前，项目不宣称普遍节省，也不提供“安装后即可
-自动路由”的承诺。
+方案 A 运行时已在当前仓库落地：固定基线链路、Shadow/Active 双模式、
+pair 证明目录与派生目录 ID、Jev 版本与策略绑定、SSE 终态归因、取消
+传播、受控 Active 采证入口与配对评估门禁均实现并通过确定性 HTTP 测试
+（本地 ticket 09–20 已完成，08 已实现待实机验收）。仍开放的是真实证据
+与发布决定（ticket 21–25）：可重跑的实机 A→B→A 会话、独立取消与压缩
+续跑证据、预注册配对评估及真实质量/成本结论。通过这些验证前，项目不
+宣称普遍节省，也不提供“安装后即可自动路由”的承诺。
 
 仓库的 [skills/jev-auto-router/SKILL.md](skills/jev-auto-router/SKILL.md) 是安装与运行的操作说明；Skill 本身不拦截模型调用，路由发生在本地代理中。
 
@@ -107,7 +142,8 @@ Router Compass 记录每次调用的 Jev 选择、实际模型与档位、用量
 npm ci
 npm run build
 JEV_API_KEY="<your-key>" \
-# Replace with a pair you have successfully requested through this caller edge.
+# Replace with a pair you have successfully requested through this caller edge,
+# e.g. gpt-6-sol/medium
 JEV_BASELINE="<verified-model>/<verified-effort>" \
 JEV_UPSTREAM_BASE_URL="<authenticated-caller-edge-url>" npm start
 curl -s localhost:8787/health          # 路由状态、基线档位、模型目录
@@ -115,7 +151,24 @@ npm test                               # 构建并运行全部测试
 npm run typecheck
 ```
 
-把 Codex 的 Responses 流量指向本地代理后，每次调用的路由标签通过响应头 `x-jev-route` / `x-jev-route-source` 返回，`GET /decisions` 查看调用与任务记录。记录包含上游状态、SSE 首个输出增量和完成时间，以及仅供续接核对的工具 ID 摘要；不会保存提示词或工具原文。控制信号（任务 ID、步骤类型、强制模型）通过 `x-jev-*` 请求头传入，不进入转发体。
+评估与采证工具：
+
+```sh
+npm run bench:jev-smoke             # 合成 Jev 集成冒烟（不评执行质量）
+npm run bench:active-evaluation     # 本机受控 Active 采证入口（仅采证，非发布报告）
+npm run bench:evaluate              # 汇总配对评估 JSON 报告（Active 门禁输入）
+```
+
+### 本地 HTTP 接口
+
+| 方法与路径 | 作用 |
+| --- | --- |
+| `POST /v1/responses` | Responses 入口；`model=jev/auto` 触发逐调用路由，真实模型直接透传 |
+| `GET /health` | 路由状态、基线可请求性、已证明 pair、目录 ID 与证明排除原因 |
+| `GET /decisions` | 每次调用与任务的审计记录（无提示词或工具原文） |
+| `POST /__jev/task/<id>/verification` | 回报任务边界验收结果，关联路由记录 |
+
+控制信号通过 `x-jev-*` 请求头传入，不进入转发体：`x-jev-task-id`（必填）、`x-jev-step`（步骤类型）、`x-jev-current-model`、`x-jev-context-size-bucket`、`x-jev-forced-model`（硬约束单模型）、`x-jev-astra-mandate`（明确要求使用 Astra）、`x-jev-competing-authority`（存在其他路由权威时跳过 Jev）。每次调用的路由结果通过响应头 `x-jev-route`（`model:effort`）与 `x-jev-route-source` 返回。用户输入只在本地做敏感检查与长度分桶，仅分桶结果可进入路由状态。
 
 ### 配置
 

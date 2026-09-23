@@ -4,12 +4,16 @@
 
 In the architecture, Jev chooses the model and reasoning effort for each call. A local Responses proxy preserves the Codex session and tool loop. Independent verification checks the finished task. Router Compass connects the route, actual usage, and acceptance result to answer one question: **Did using less frontier capacity still complete the task correctly and reduce the full delivery cost?**
 
+The current lineup is **three GPT-6 tiers**: `gpt-6-luna` (Luna Max, heavy reasoning), `gpt-6-sol` (the workhorse, which also plays the fixed fallback-baseline role), and `gpt-6-astra` (absent from candidates by default; admitted only on evidence or explicit user mandate).
+
 > [!IMPORTANT]
-> **Status: the Scheme A contract is approved; runtime migration is pending.**
-> A real Codex A→B→A summary supports cross-model continuation,
-> authentication, tool-result ID continuity, and HTTP streaming before
-> completion. Effort fidelity, cancellation, compaction, version capture, and
-> repeatability remain open. This is not a production installation guide.
+> **Status: the Scheme A runtime is implemented; live evidence is still being
+> collected.** The fixed-baseline path, Shadow, controlled Active,
+> cancellation propagation, pair-proof catalog, and paired-evaluation gates
+> are in place and covered by deterministic HTTP tests. Repeatable live
+> A→B→A, independent cancellation, post-compaction continuation, and the
+> real paired release decision (local tickets 21–25) remain open. This is
+> not a production installation guide.
 
 [简体中文](README.md) · [Architecture](docs/solution.md) · [Decision ADR 0017](docs/adr/0017-per-call-responses-routing.md) · [Chinese article](https://minilv.github.io/2026/09/18/codex-auto-router/) · [License](LICENSE)
 
@@ -17,8 +21,10 @@ In the architecture, Jev chooses the model and reasoning effort for each call. A
 
 - **A TypeSafe account and Jev API key.** Get a key through the [TypeSafe Quick Start](https://docs.typesafe.ai/introduction/quickstart). This proxy reads `JEV_API_KEY` when it calls Jev. TypeSafe's own examples use `TYPESAFE_API_KEY`; both variables can hold the same key. Never commit the key.
 - **Node.js 22+, a signed-in Codex CLI, and access to the model and reasoning-effort pairs you want to route.** A Jev key alone does not make live per-call routing available.
-- **This is still a validation prototype.** The existing report must become
-  repeatable evidence, and later tickets must migrate the runtime to Scheme A.
+- **This is still a validation prototype.** The runtime follows Scheme A and
+  passes deterministic tests, but real caller-edge proof assets, repeatable
+  live sessions, and paired-evaluation results are still pending; there is no
+  production install flow yet.
 
 Before running the local proxy, set the key from your TypeSafe dashboard in the current shell:
 
@@ -30,11 +36,9 @@ export JEV_API_KEY="<your-typesafe-jev-api-key>"
 
 A coding task mixes hard reasoning about requirements or failures with routine calls to read files, make known edits, and follow up on tool results. Running every call on a frontier model spends scarce capacity on simple steps; running the whole task on a small model risks the difficult ones.
 
-Jev Auto Router makes a choice at **each meaningful model call** inside the same session. It does not start a new worker for each task. For example, Sol could frame the problem, Luna Max handle explicit follow-up work, Terra resolve an ordinary implementation issue, and Sol analyze a failed test. This illustrates the routing granularity; it is not a measured outcome.
+Jev Auto Router makes a choice at **each meaningful model call** inside the same session. It does not start a new worker for each task. For example, Sol could frame the problem, Luna Max handle heavy reasoning, Sol continue routine implementation and tool follow-ups, and Astra join only for an evidenced reasoning blocker through its one-shot admission. This illustrates the routing granularity; it is not a measured outcome.
 
 ## The delivery loop
-
-[Scheme A visual technical design](tech-design.html)
 
 ```text
 Codex Responses(model=jev/auto)
@@ -55,6 +59,33 @@ pinned Jev: one Choice -> Guard -> Apply model + reasoning.effort only
 authenticated non-recursive caller edge -> native SSE / JSON returned immediately
 ```
 
+### System topology
+
+<p align="center">
+  <img src="docs/assets/jev-topology.png" alt="Topology: Codex CLI, Codex Router, Jev Router, authenticated caller edge, and GPT models on the main line, with TypeSafe Jev as the routing side channel" width="880">
+</p>
+
+The main line carries only native Codex Responses traffic; Jev is a routing side channel that receives allowlisted facts and candidate pairs, never upstream credentials. The virtual-model entry (`jev/auto`) and the authenticated caller edge stay separate to prevent recursive forwarding; user content reaches only the GPT upstream it was already bound for, through the local proxy. See the full [Scheme A visual technical design](tech-design.html).
+
+### Interaction sequence
+
+<p align="center">
+  <img src="docs/assets/jev-sequence.png" alt="Sequence diagram of Codex, Codex Router, Jev Router, TypeSafe Jev, and the caller edge" width="880">
+</p>
+
+Jev never becomes the executing model: it only hands the local router a constrained choice before the upstream call. Responses stream back before generation completes; the observer reads completion events on the side and never blocks or rewrites what Codex receives. Fallback is decided only before the upstream request starts; once output has begun, failures surface as-is and the same call is never replayed on another model.
+
+### Six modules
+
+| Module | Responsibility | Output |
+| --- | --- | --- |
+| M1 · Ingress | Receive the Responses request; identify session, call kind, user model, infrastructure calls | CallContext + native request |
+| M2 · Admission & privacy | Build candidates from proved pairs; apply user hard constraints; extract allowlisted facts only | RoutingFacts + CandidatePairs |
+| M3 · One Jev Choice | Pinned version, fixed question template, one deadline-bounded call | ProposedPair or failure reason |
+| M4 · Guard + Apply | Validate membership, availability, constraints, confidence; rewrite only `model` and `reasoning.effort` | AppliedRequest + RouteSource |
+| M5 · Relay | Call the verified caller edge; pass bytes through; propagate cancellation | Native SSE / JSON response |
+| M6 · Observe | Record proposed vs applied vs observed pairs separately; missing values stay UNKNOWN, no raw text | Per-call audit record |
+
 ### What Jev does
 
 - The router builds only exact `(model, reasoning effort)` pairs proved
@@ -64,14 +95,20 @@ authenticated non-recursive caller edge -> native SSE / JSON returned immediatel
 - Production routing pins a validated Jev version. OFF, privacy refusal,
   insufficient facts, timeout, low confidence, and invalid answers all use the
   same proved fixed baseline with distinct reasons. There is no product-wide
-  `Terra/medium` default. A user-selected real model always bypasses Jev.
+  default pair. A user-selected real model always bypasses Jev.
+- **Astra admission is scarce.** `gpt-6-astra` is absent from candidates by
+  default; it joins a call only through a one-shot eligibility opened by
+  verified reasoning-blocker evidence (consumed on use) or an explicit user
+  mandate (`x-jev-astra-mandate`). Ordinary failures never create persistent
+  eligibility.
 
 ### Candidate Pairs
 
 Candidates are exact `(model, reasoning_effort)` pairs, not brand tiers. A
 pair enters the Choice only after the current caller edge has requested it
 successfully and it satisfies capability and user hard constraints. Catalog or
-model-picker visibility is not execution evidence.
+model-picker visibility is not execution evidence. Current tiers are
+`luna_max` / `sol` / `astra`.
 
 ## What data goes where
 
@@ -96,11 +133,17 @@ Router Compass records Jev's choice, the actual model and effort, usage, cache b
 
 ## Current status
 
-The repository still contains the earlier proxy implementation and tests.
-Scheme A's documentation contract is migrated; ordered local tickets now cover
-the fixed-baseline path, Shadow, Active, failures/cancellation, repeatable live
-evidence, and paired evaluation. Until they pass, this project makes no general
-savings or production-readiness claim.
+The Scheme A runtime lives in this repository: the fixed-baseline path,
+Shadow/Active modes, the pair-proof catalog with derived catalog identity,
+Jev version and policy binding, SSE terminal-failure attribution,
+cancellation propagation, the controlled Active evaluation entry, and the
+paired-evaluation gates are implemented and covered by deterministic HTTP
+tests (local tickets 09–20 complete; 08 implemented pending live acceptance).
+What remains open is real evidence and the release decision (tickets 21–25):
+repeatable live A→B→A sessions, independent cancellation and post-compaction
+continuation evidence, the preregistered paired evaluation, and real
+quality/cost results. Until those pass, this project makes no general savings
+or production-readiness claim.
 
 [skills/jev-auto-router/SKILL.md](skills/jev-auto-router/SKILL.md) is the install-and-operate guide; the Skill itself never intercepts model calls — routing happens inside the local proxy.
 
@@ -112,7 +155,8 @@ Requires Node.js 22+. These commands start the local proxy and validate the curr
 npm ci
 npm run build
 JEV_API_KEY="<your-key>" \
-# Replace with a pair you have successfully requested through this caller edge.
+# Replace with a pair you have successfully requested through this caller edge,
+# e.g. gpt-6-sol/medium
 JEV_BASELINE="<verified-model>/<verified-effort>" \
 JEV_UPSTREAM_BASE_URL="<authenticated-caller-edge-url>" npm start
 curl -s localhost:8787/health          # router status, baseline, model catalog
@@ -120,7 +164,24 @@ npm test                               # builds, then runs the full suite
 npm run typecheck
 ```
 
-Once Codex's Responses traffic points at the local proxy, each call returns its route tag through the `x-jev-route` / `x-jev-route-source` response headers; `GET /decisions` shows call and task records, including upstream status, SSE first-output/completion timing, and digested tool references. Records omit prompts and tool text. Control signals (task id, step type, forced model) travel as `x-jev-*` request headers and never enter the forwarded body.
+Evaluation and evidence tooling:
+
+```sh
+npm run bench:jev-smoke             # synthetic Jev integration smoke (no execution-quality claim)
+npm run bench:active-evaluation     # local controlled Active evidence entry (evidence only, not a release report)
+npm run bench:evaluate              # summarize the paired-evaluation JSON report (Active gate input)
+```
+
+### Local HTTP surface
+
+| Method & path | Purpose |
+| --- | --- |
+| `POST /v1/responses` | Responses entry; `model=jev/auto` triggers per-call routing, real models pass through |
+| `GET /health` | Router status, baseline requestability, proved pairs, catalog ID, proof exclusions |
+| `GET /decisions` | Per-call and per-task audit records (no prompts or tool text) |
+| `POST /__jev/task/<id>/verification` | Report the task-boundary verification result, linked to route records |
+
+Control signals travel as `x-jev-*` request headers and never enter the forwarded body: `x-jev-task-id` (required), `x-jev-step` (step type), `x-jev-current-model`, `x-jev-context-size-bucket`, `x-jev-forced-model` (hard-constrain to one model), `x-jev-astra-mandate` (explicitly require Astra), and `x-jev-competing-authority` (skip Jev under another routing authority). Each call's outcome returns via the `x-jev-route` (`model:effort`) and `x-jev-route-source` response headers. User input is inspected locally for secrets and length-bucketed; only the bucket may enter routing state.
 
 ### Configuration
 
