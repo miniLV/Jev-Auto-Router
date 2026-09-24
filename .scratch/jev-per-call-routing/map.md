@@ -51,6 +51,7 @@ Issue 06 只有在 08–14、16–18、21–23 都满足其相关验收后才能
 - [Issue 16](issues/16-sse-terminal-failure-status.md)：共享 SSE 观察器识别明确失败/不完整与异常 EOF，失败优先于完成；原始事件顺序保留且输出后不会重放。scanner 和本地 HTTP stub 验证通过，真实 caller-edge/Codex 证据仍待 Issue 21/22。
 - [Issue 19](issues/19-verify-active-evidence-artifacts.md)：正式 Active 读取受限目录下的脱敏 bundle 与资产、验证字节摘要和关联，再重算配对报告；共享 baseline 资产支持多候选，清单外不合格候选缺 refs 不会阻断合格候选。CLI 端到端与合成门禁测试通过；哈希不证明来源真实性，自动校验不等于真人质量评审或实机证据，真实结果仍待 Issue 21/22/25。
 - [Issue 26](issues/26-bind-real-transport-compaction-evidence.md)：正式 transport v2 绑定 A→B→A、工具 ID、SSE/JSON、认证 edge 与独立压缩来源；旧 v1 资产拒绝。合成门禁测试与全量验证通过，真实来源仍待 Issue 21/23/25。
+- [Issue 27](issues/27-align-design-and-parent-acceptance.md)：技术设计区分历史用户摘要和当前未完成的实机发布验收，原 06 改为当前 proof 预冻结的动态 A→B→A 完整 pair；未回填真实 PASS。
 
 ### 已实现，待实机验收
 

@@ -72,6 +72,7 @@
     .pill.orange { background: var(--orange-soft); border-color: var(--orange); }
     .pill.blue { background: var(--blue-soft); border-color: var(--blue); }
     .pill.green { background: var(--green-soft); border-color: var(--green); }
+    .pill.pink { background: var(--pink-soft); border-color: var(--pink); }
     .hero-note { margin-top: 25px; padding: 14px 18px; max-width: 1000px; border-left: 5px solid var(--teal); background: rgba(255, 252, 244, .8); color: #42504e; font-size: 14px; }
 
     main { padding-bottom: 85px; }
@@ -203,10 +204,11 @@
     <p class="lead">同一个 Codex 任务、同一个工具循环。每次模型调用由 Jev 选择可执行的模型与推理档位；本地路由器负责校验、应用和原样转发 Responses 流。工具执行仍由 Codex 管理。</p>
     <div class="pills" aria-label="设计状态">
       <span class="pill orange">方案 A：本地 Responses 路由</span>
-      <span class="pill green">A→B→A：用户报告已通过</span>
+      <span class="pill green">历史摘要：A→B→A（用户报告，2026-09-23）</span>
+      <span class="pill pink">当前发布实机证据：未完成</span>
       <span class="pill blue">产物：供 Review 的设计稿</span>
     </div>
-    <div class="hero-note"><strong>设计前提：</strong>已存在可工作的认证 caller edge，并已在真实 Codex 会话完成跨模型工具循环。本文把该结果作为用户提供的前提；没有在此文档中重新执行或复核测试。此稿提出新架构，不声明现有仓库实现已经符合它。</div>
+    <div class="hero-note"><strong>证据边界：</strong>绿色标签保留的是 2026-09-23 用户提供的历史可行性摘要：当时某个认证 caller edge 上曾报告跨模型工具循环。该摘要没有可重跑命令、版本绑定、当前 caller-edge 精确 pair 证明、取消、压缩续跑或独立质量/成本验收，不能作为当前发布证据。当前所需的真实、可重跑 A→B→A 证据仍未完成；本文是设计草案，不声明现有仓库实现已经符合它。</div>
   </header>
 
   <main class="shell">
@@ -377,7 +379,7 @@
           <ul>
             <li><strong>Jev 回答：</strong>一个候选 pair ID 与置信度；模型和 effort 不分开拼接。</li>
             <li><strong>Guard：</strong>检查 pair ID 属于当前候选、模型仍可请求、用户约束未被覆盖、置信度达到已校准阈值。</li>
-            <li><strong>失败回退：</strong>使用事先验证的可靠组合，例如 <code>Sol/medium</code>；不可用则在发送前明确失败。用户固定模型不会被回退降级。</li>
+            <li><strong>失败回退：</strong>使用当前认证 caller edge 已证明且预先配置的 Fallback Baseline；这里没有通用默认。基线不可用则在发送前明确失败。用户固定模型不会被回退降级。</li>
             <li><strong>记录：</strong>区分 Jev 提议、实际应用和上游报告的真实模型；未知用量保留 UNKNOWN。</li>
           </ul>
         </div>
@@ -391,20 +393,20 @@
   "stream": true
 }</pre></div>
         <div class="apply-arrow" aria-hidden="true">→</div>
-        <div class="code-card"><div class="code-head">Apply 后发给 caller edge · 示意</div><pre>{
-  "model": "gpt-5.6-sol",
-  "reasoning": { "effort": "high" },
+        <div class="code-card"><div class="code-head">Apply 后发给 caller edge · A/B 示意（须以当前 edge proof 冻结）</div><pre>{
+  "model": "A.model",
+  "reasoning": { "effort": "A.effort" },
   "input": "…",
   "tools": ["…"],
   "stream": true
 }</pre></div>
       </div>
-      <div class="contract-note">Apply 合约：<code>routed = { ...request, model: chosen.model, reasoning: { ...request.reasoning, effort: chosen.effort } }</code>。<code>input</code>、工具定义、工具调用 ID、stream 标记与其余请求字段原样保留；<code>service_tier</code> 不暗中改写。</div>
+      <div class="contract-note">Apply 合约：<code>routed = { ...request, model: chosen.model, reasoning: { ...request.reasoning, effort: chosen.effort } }</code>。示例中的 <code>A.model/A.effort</code> 是符号占位；运行前必须从当前认证 caller edge 的精确 pair proof 冻结不同的 A/B 完整 pair。<code>input</code>、工具定义、工具调用 ID、stream 标记与其余请求字段原样保留；<code>service_tier</code> 不暗中改写。</div>
     </section>
 
     <section id="review">
       <div class="section-head"><span class="num">06</span><h2>请重点 Review 的三个决定</h2></div>
-      <p class="section-sub">这些决定影响能否从已通过的可行性测试走向稳定自动路由。</p>
+      <p class="section-sub">这些决定影响能否从历史用户报告的可行性摘要走向可重跑、稳定的自动路由。</p>
       <div class="review-grid">
         <article class="sketch-card blue"><div class="tiny-label">R1 · TRANSPORT</div><h3>认证 caller edge 的契约</h3><p>确认验证通过的是哪个版本和入口；明确认证归属、请求头转发、取消传播与 caller edge 升级时的兼容测试。该入口必须绕开 <code>jev/auto</code> 再路由。</p></article>
         <article class="sketch-card pink"><div class="tiny-label">R2 · ROUTING SIGNAL</div><h3>隐私与决策信息量</h3><p>在不发送原文的前提下，确定哪些结构化事实足以让 Jev 区分简单跟进和困难推理。若事实不足，该次调用使用可靠组合，并在 shadow 数据中量化比例。</p></article>

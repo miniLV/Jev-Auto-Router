@@ -6,7 +6,7 @@ Blocked by: 05 — 保护 Active Mode 的故障与取消边界。
 
 Status: ready-for-agent
 
-- [ ] 可重跑的真实会话记录 `gpt-5.5 → gpt-5.6-sol → gpt-5.5` 的上游实际模型、请求中的 effort、响应状态及后续调用引用的工具结果 ID；上游能权威报告 effort 时核对一致性，否则标为 `UNKNOWN` 并保留该证据缺口。
+- [ ] 可重跑的真实会话记录运行前从当前认证 caller edge 的有效精确 pair proof 预冻结的 `<A.model>/<A.effort> → <B.model>/<B.effort> → <A.model>/<A.effort>` 上游调用；A/B 必须是不同且当前已证明可请求的真实模型与完整 effort pair。记录上游实际模型、请求中的 effort、响应状态及后续调用引用的工具结果 ID；上游能权威报告 effort 时核对一致性，否则标为 `UNKNOWN` 并保留该证据缺口。
 - [ ] HTTP 连接时间戳证明 SSE 的首个输出增量早于响应完成；非流式 JSON 核对响应一致性，不要求提前输出，也不把终端逐字显示作为代理验收结果。
 - [ ] 独立实机情形证明取消会停止上游且无重放、会话压缩后仍能继续同一工具循环并重新选路。
 - [ ] 脱敏证据保存 Codex、Responses Proxy、Jev、caller edge、策略和候选目录的版本或配置标识及关联 ID，不保存提示词、工具原文或凭据；无法复现的检查不得标为完整 P0 通过。
@@ -14,3 +14,4 @@ Status: ready-for-agent
 ## Comments
 
 - 2026-09-23：实现进度已补入 `/decisions` 记录：上游 HTTP 状态、首个 SSE 输出增量与响应完成时间、非流式响应完成时间，以及仅用于关联的工具调用/结果 ID 摘要；`/health` 暴露策略、候选组合、caller-edge 和候选目录标识。HTTP 替身测试覆盖了时序、取消及工具结果续接。当前环境缺少 Jev 凭据和真实 caller-edge 地址，因此这些测试不是实机证据；Codex CLI A→B→A、真实取消与压缩后续跑仍未验证，本 issue 未完成。
+- 2026-09-24：验收口径从旧环境示例迁移为运行前冻结的动态 A/B 契约：A/B 由当前认证 caller edge 的精确成功证明选择，`A.model !== B.model`，每个模型与完整 reasoning effort 组成一个 pair，三次调用固定为 A→B→A。2026-09-23 的 `gpt-5.5 → gpt-5.6-sol → gpt-5.5` 只保留为[历史用户报告](../evidence/aba-transfer-report.md)，不能作为当前型号、默认基线或 PASS；本票仍等待可重跑、版本绑定的真实证据，其他验收项保持未完成。
