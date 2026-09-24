@@ -336,6 +336,32 @@ test("UNKNOWN token or edge cost blocks complete-cost attribution", () => {
   assert.deepEqual(report.active_candidate_allowlist, ["gpt-6-luna/max"]);
 });
 
+test("UNKNOWN price metadata blocks cost and savings claims", () => {
+  for (const field of ["currency", "priceSourceRef"] as const) {
+    const report = pairedComparison({ ...config, [field]: UNKNOWN }, plan, tasks(), passingCandidateEvidence());
+    assert.equal(report.pairing_gate, "FAIL", field);
+    assert.equal(report.gates.cost, "UNKNOWN", field);
+    assert.equal(report.gates.savings_claim_eligible, false, field);
+  }
+});
+
+test("incomplete frozen gates and task or review metadata cannot pass", () => {
+  const incompleteGates = { ...plan.gates } as Partial<EvaluationPlan["gates"]>;
+  delete incompleteGates.maximum_policy_cost_ratio;
+  const invalidPlans: EvaluationPlan[] = [
+    { ...plan, gates: incompleteGates as EvaluationPlan["gates"] },
+    { ...plan, independent_review_method: UNKNOWN },
+    { ...plan, tasks: plan.tasks.map((task, index) => index === 0 ? { ...task, acceptance_id: "" } : task) },
+    { ...plan, tasks: plan.tasks.map((task, index) => index === 0 ? { ...task, intent_digest: UNKNOWN } : task) },
+  ];
+  for (const invalidPlan of invalidPlans) {
+    const pairedTasks = tasks(invalidPlan);
+    const report = pairedComparison(config, invalidPlan, pairedTasks, passingCandidateEvidence(invalidPlan, pairedTasks));
+    assert.equal(report.pairing_gate, "FAIL");
+    assert.equal(report.gates.savings_claim_eligible, false);
+  }
+});
+
 test("every recorded retry is priced as another physical call", () => {
   const withRetry = tasks();
   withRetry[0].policy.calls.push(call("upstream", "gpt-6-luna", "max"));

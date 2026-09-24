@@ -436,9 +436,10 @@ function validatePairs(
   const errors: string[] = [];
   if (config.release !== plan.release) errors.push("release does not match the frozen plan");
   if (config.mode !== "active") errors.push("the policy arm must run in Active mode for a controlled comparison");
-  if (!config.callerEdgeId || config.callerEdgeId === UNKNOWN || !config.candidateCatalogId || config.candidateCatalogId === UNKNOWN ||
+  if (!config.release || config.release === UNKNOWN || !config.callerEdgeId || config.callerEdgeId === UNKNOWN || !config.candidateCatalogId || config.candidateCatalogId === UNKNOWN ||
       !config.jevVersion || config.jevVersion === UNKNOWN || !config.policyVersion || config.policyVersion === UNKNOWN ||
-      !config.questionSchemaVersion || config.questionSchemaVersion === UNKNOWN || !config.currency || !config.priceSourceRef || config.candidates.length === 0) {
+      !config.questionSchemaVersion || config.questionSchemaVersion === UNKNOWN || !config.currency || config.currency === UNKNOWN ||
+      !config.priceSourceRef || config.priceSourceRef === UNKNOWN || config.candidates.length === 0) {
     errors.push("runtime versions, candidate catalog, caller edge, or candidate pairs are not pinned");
   }
   if (!isValidJevPolicyParameters(config.runtimePolicy)) {
@@ -449,11 +450,26 @@ function validatePairs(
   }
   if (new Set(config.candidates.map(pairKey)).size !== config.candidates.length) errors.push("candidate pairs are not unique");
   const frozenAt = Date.parse(plan.frozen_at);
-  if (!plan.repository_revision || !plan.repository_snapshot_digest || !plan.randomization_seed || !plan.independent_review_method || !Number.isFinite(frozenAt)) {
+  if (!hasKnownText(plan.repository_revision) || !hasKnownText(plan.repository_snapshot_digest) ||
+      !hasKnownText(plan.randomization_seed) || !hasKnownText(plan.independent_review_method) || !Number.isFinite(frozenAt)) {
     errors.push("the plan is missing a frozen revision, snapshot, review method, randomization seed, or timestamp");
   }
-  if (!plan.tasks.length || Object.values(plan.gates).some(value => !Number.isFinite(value) || value < 0)) {
+  const gateKeys: Array<keyof EvaluationPlan["gates"]> = [
+    "minimum_quality_score", "maximum_completion_regression", "maximum_quality_regression",
+    "maximum_added_rework_per_task", "maximum_added_takeover_rate", "maximum_policy_cost_ratio",
+  ];
+  const gates = plan.gates as Partial<EvaluationPlan["gates"]> | undefined;
+  if (!plan.tasks.length || !gates || gateKeys.some(key => {
+    const value = gates[key];
+    return value === undefined || !Number.isFinite(value) || value < 0;
+  })) {
     errors.push("the plan has no task set or required frozen thresholds");
+  }
+  if (plan.tasks.some(task => !hasKnownText(task.task_id) || !hasKnownText(task.intent_digest) ||
+      !hasKnownText(task.snapshot_digest) || !hasKnownText(task.acceptance_id) ||
+      (task.first_arm !== "baseline" && task.first_arm !== "policy") ||
+      (task.cache_condition !== "cold" && task.cache_condition !== "warm"))) {
+    errors.push("the frozen plan contains an empty or UNKNOWN task field");
   }
   const expected = new Map(plan.tasks.map(task => [task.task_id, task]));
   if (expected.size !== plan.tasks.length) errors.push("the frozen plan contains duplicate task IDs");
@@ -670,6 +686,10 @@ function pairKey(pair: CandidatePair): string {
 function sameRuntimePolicy(left: unknown, right: unknown): boolean {
   return isValidJevPolicyParameters(left) && isValidJevPolicyParameters(right) &&
     left.confidenceFloor === right.confidenceFloor && left.deadlineMs === right.deadlineMs;
+}
+
+function hasKnownText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value !== UNKNOWN;
 }
 
 function evidenceGate(status: Gate | undefined, refs: unknown, requiredKind: string): Gate {
