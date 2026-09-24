@@ -75,10 +75,16 @@ const runtime = {
 
 type AssetKind = "transport" | "cancellation" | "shadow" | "diff" | "test";
 interface AssetFacts {
-  requested_pair?: ModelEffortPair;
-  observed_model?: string | null;
-  observed_effort?: string;
-  first_event_before_completion?: boolean;
+  release_id?: string;
+  candidate_id?: string;
+  configuration_digest?: string;
+  association_id?: string;
+  caller_edge?: Record<string, unknown>;
+  aba?: Record<string, unknown>;
+  sse?: Record<string, unknown>;
+  json?: Record<string, unknown>;
+  compaction?: Record<string, unknown>;
+  sources?: Array<Record<string, unknown>>;
   phase?: "jev_wait" | "upstream_generation";
   cancelled?: boolean;
   replayed?: boolean;
@@ -95,6 +101,11 @@ interface AssetFacts {
   accepted?: boolean;
   rework_cycles?: number;
   root_takeover?: boolean;
+}
+
+interface SourceFile {
+  path: string;
+  bytes: Buffer;
 }
 
 function sha256(value: Uint8Array): string {
@@ -192,12 +203,15 @@ function evidenceData(
   candidatePairs = evaluationConfig.candidates,
   observedModel?: string | null,
   observedEffort?: string,
-): { evaluations: CandidateEvaluation[]; assets: Array<Record<string, unknown>> } {
+): { evaluations: CandidateEvaluation[]; assets: Array<Record<string, unknown>>; sources: SourceFile[] } {
   const evaluations = candidatePairs.map(pair => candidateEvidence(pair, evaluationConfig)[0]);
   const configDigest = digest(evaluationConfig);
   const assets: Array<Record<string, unknown>> = [];
+  const sources: SourceFile[] = [];
   const addAsset = (kind: AssetKind, associationId: string, facts: AssetFacts, candidateId: string | null): string => {
-    const schemaVersion = kind === "transport" || kind === "cancellation" || kind === "shadow"
+    const schemaVersion = kind === "transport"
+      ? "jev-transport-evidence-v2"
+      : kind === "cancellation" || kind === "shadow"
       ? `jev-${kind}-evidence-v1`
       : "jev-quality-evidence-v1";
     const doc = { schema_version: schemaVersion, kind, release_id: evaluationConfig.release, candidate_id: candidateId,
@@ -213,9 +227,118 @@ function evidenceData(
     const pair = item.pair;
     const candidateId = `${pair.model}/${pair.effort}`;
     const gateAssociation = (kind: "transport" | "cancellation" | "shadow") => `${candidateId}:gate:${kind}`;
+    const sessionId = `sha256:${sha256(Buffer.from(`${candidateId}:session`))}`;
+    const runId = `run-${candidateId.replaceAll("/", "-")}`;
+    const digestId = (label: string) => `sha256:${sha256(Buffer.from(`${candidateId}:${label}`))}`;
+    const toolDigestId = (label: string) => `sha256:${sha256(Buffer.from(`${candidateId}:${label}`)).slice(0, 24)}`;
+    const observed = { model: observedModel === undefined ? pair.model : observedModel ?? "unknown", effort: observedEffort ?? pair.effort };
+    const calls = [
+      { sequence: 1, response_mode: "sse", guard_verdict: "allow", proposed_pair: pair, requested_pair: pair, applied_pair: pair, observed_pair: { model: pair.model, effort: pair.effort },
+        jev_request_version: evaluationConfig.jevVersion, jev_resolved_version: evaluationConfig.jevVersion, request_at: "2026-09-20T00:00:00.900Z",
+        completion_at: "2026-09-20T00:00:01.900Z", http_status: 200, terminal_status: "completed", physical_request_count: 1,
+        choice_id_digest: digestId("choice-1"), tool_call_id_digest: toolDigestId("tool-1"), tool_result_id_digest: null },
+      { sequence: 2, guard_verdict: "allow", proposed_pair: { model: "gpt-6-sol", effort: "medium" }, requested_pair: { model: "gpt-6-sol", effort: "medium" }, applied_pair: { model: "gpt-6-sol", effort: "medium" },
+        response_mode: "sse", observed_pair: { model: "gpt-6-sol", effort: "medium" }, jev_request_version: evaluationConfig.jevVersion, jev_resolved_version: evaluationConfig.jevVersion,
+        request_at: "2026-09-20T00:00:02.900Z", completion_at: "2026-09-20T00:00:03.900Z", http_status: 200, terminal_status: "completed", physical_request_count: 1,
+        choice_id_digest: digestId("choice-2"), tool_call_id_digest: toolDigestId("tool-2"), tool_result_id_digest: toolDigestId("tool-1") },
+      { sequence: 3, response_mode: "sse", guard_verdict: "allow", proposed_pair: pair, requested_pair: pair, applied_pair: pair, observed_pair: observed, jev_request_version: evaluationConfig.jevVersion,
+        jev_resolved_version: evaluationConfig.jevVersion, request_at: "2026-09-20T00:00:04.900Z", completion_at: "2026-09-20T00:00:05.900Z", http_status: 200,
+        terminal_status: "completed", physical_request_count: 1, choice_id_digest: digestId("choice-3"), tool_call_id_digest: toolDigestId("tool-3"),
+        tool_result_id_digest: toolDigestId("tool-2") },
+    ];
+    const aba = {
+      run_id: runId,
+      session_id: sessionId,
+      calls,
+      tool_continuations: [
+        { from_call: 1, to_call: 2, tool_call_id_digest: toolDigestId("tool-1"), tool_result_id_digest: toolDigestId("tool-1") },
+        { from_call: 2, to_call: 3, tool_call_id_digest: toolDigestId("tool-2"), tool_result_id_digest: toolDigestId("tool-2") },
+      ],
+      terminal_status: "completed",
+    };
+    const sse = {
+      call_sequence: 1,
+      status: 200,
+      first_increment_at: "2026-09-20T00:00:01.100Z",
+      completion_at: "2026-09-20T00:00:01.900Z",
+      upstream_end_at: "2026-09-20T00:00:02.000Z",
+      event_order: ["first_increment", "completion", "upstream_end"],
+      terminal_status: "completed",
+      first_increment_before_completion: true,
+    };
+    const json = {
+      probe_id_digest: digestId("json-probe"),
+      request_at: "2026-09-20T00:00:03.950Z",
+      completion_at: "2026-09-20T00:00:04.000Z",
+      status: 200,
+      headers_digest: digestId("json-headers"),
+      body_digest: digestId("json-body"),
+      terminal_status: "completed",
+    };
+    const compactionSessionId = `sha256:${sha256(Buffer.from(`${candidateId}:compaction-session`))}`;
+    const compactionRunId = `compaction-${candidateId.replaceAll("/", "-")}`;
+    const compaction = {
+      run_id: compactionRunId,
+      session_id: compactionSessionId,
+      event_id_digest: digestId("compaction"),
+      occurred_at: "2026-09-20T00:00:06.000Z",
+      new_choice_id_digest: digestId("choice-after-compaction"),
+      jev_request_version: evaluationConfig.jevVersion,
+      jev_resolved_version: evaluationConfig.jevVersion,
+      new_choice_at: "2026-09-20T00:00:06.100Z",
+      request_at: "2026-09-20T00:00:06.200Z",
+      completion_at: "2026-09-20T00:00:06.900Z",
+      tool_continuation: {
+        tool_call_id_digest: toolDigestId("compaction-tool"),
+        tool_result_id_digest: toolDigestId("compaction-tool"),
+        before_session_id: compactionSessionId,
+        after_session_id: compactionSessionId,
+      },
+      proposed_pair: pair,
+      requested_pair: pair,
+      applied_pair: pair,
+      observed_pair: { model: pair.model, effort: observedEffort ?? pair.effort },
+      guard_verdict: "allow",
+      http_status: 200,
+      terminal_status: "completed",
+      physical_request_count: 1,
+      new_choice: true,
+    };
+    const callerEdge = { id: evaluationConfig.callerEdgeId, authenticated: true, recursive: false };
+    const sourceDocs = [
+      { phase: "aba", run_id: runId, session_id: sessionId, facts: { aba, sse, json, caller_edge: callerEdge } },
+      { phase: "compaction", run_id: compactionRunId, session_id: compactionSessionId, facts: { compaction } },
+    ].map(source => {
+      const path = `sources/${candidateId.replaceAll("/", "-")}-${source.phase}.json`;
+      const doc = {
+        schema_version: "jev-transport-source-v1",
+        kind: "transport_source",
+        phase: source.phase,
+        release_id: evaluationConfig.release,
+        candidate_id: candidateId,
+        configuration_digest: configDigest,
+        association_id: gateAssociation("transport"),
+        run_id: source.run_id,
+        session_id: source.session_id,
+        facts: source.facts,
+      };
+      const bytes = Buffer.from(JSON.stringify(doc));
+      sources.push({ path, bytes });
+      return { phase: source.phase, path, sha256: sha256(bytes), release_id: evaluationConfig.release,
+        candidate_id: candidateId, configuration_digest: configDigest, association_id: gateAssociation("transport"),
+        run_id: source.run_id, session_id: source.session_id };
+    });
     item.evidence_refs.transport = [addAsset("transport", gateAssociation("transport"), {
-      requested_pair: pair, observed_model: observedModel === undefined ? pair.model : observedModel,
-      observed_effort: observedEffort ?? pair.effort, first_event_before_completion: true,
+      release_id: evaluationConfig.release,
+      candidate_id: candidateId,
+      configuration_digest: configDigest,
+      association_id: gateAssociation("transport"),
+      caller_edge: { ...callerEdge, source_ref: sourceDocs[0].sha256 },
+      aba,
+      sse,
+      json,
+      compaction,
+      sources: sourceDocs,
     }, candidateId)];
     item.evidence_refs.cancellation = [
       addAsset("cancellation", gateAssociation("cancellation"), { phase: "jev_wait", cancelled: true, replayed: false, fallback_started: false }, candidateId),
@@ -255,7 +378,7 @@ function evidenceData(
       }
     }
   }
-  return { evaluations, assets };
+  return { evaluations, assets, sources };
 }
 
 async function fixture(
@@ -268,7 +391,8 @@ async function fixture(
   t.after(async () => rm(root, { recursive: true, force: true }));
   const assetsDir = join(root, "assets");
   await mkdir(assetsDir);
-  const { evaluations, assets } = evidenceData(evaluationConfig, evaluationConfig.candidates, observedModel, observedEffort);
+  await mkdir(join(root, "sources"));
+  const { evaluations, assets, sources } = evidenceData(evaluationConfig, evaluationConfig.candidates, observedModel, observedEffort);
   const manifest = [];
   for (const asset of assets) {
     const path = asset.path as string;
@@ -294,6 +418,7 @@ async function fixture(
       association_id: asset.association_id,
     });
   }
+  for (const source of sources) await writeFile(join(root, source.path), source.bytes);
   const bundle = {
     schema_version: "jev-active-evaluation-bundle-v1",
     config: evaluationConfig,
@@ -350,6 +475,34 @@ async function replaceBundle(root: string, report: Record<string, unknown>, edit
   await writeFile(join(root, "report.json"), JSON.stringify(report));
 }
 
+async function replaceTransportFacts(
+  data: { root: string; report: Record<string, unknown> },
+  edit: (facts: Record<string, unknown>) => void,
+): Promise<void> {
+  const bundlePath = join(data.root, "bundle.json");
+  const bundle = JSON.parse(await readFile(bundlePath, "utf8")) as Record<string, unknown>;
+  const manifest = bundle.evidence_manifest as Array<Record<string, unknown>>;
+  const entry = manifest.find(item => item.kind === "transport");
+  assert.ok(entry);
+  const assetPath = join(data.root, entry.path as string);
+  const asset = JSON.parse(await readFile(assetPath, "utf8")) as Record<string, unknown>;
+  edit(asset.facts as Record<string, unknown>);
+  const bytes = Buffer.from(JSON.stringify(asset));
+  await writeFile(assetPath, bytes);
+  const ref = `transport:sha256:${sha256(bytes)}`;
+  entry.ref = ref;
+  entry.sha256 = sha256(bytes);
+  const candidateId = entry.candidate_id as string;
+  const evaluations = bundle.candidate_evaluations as Array<Record<string, unknown>>;
+  const evaluation = evaluations.find(item => `${(item.pair as Record<string, unknown>).model}/${(item.pair as Record<string, unknown>).effort}` === candidateId);
+  assert.ok(evaluation);
+  (evaluation.evidence_refs as Record<string, unknown>).transport = [ref];
+  const bundleBytes = Buffer.from(JSON.stringify(bundle));
+  await writeFile(bundlePath, bundleBytes);
+  (data.report.active_evidence_bundle as Record<string, unknown>).sha256 = sha256(bundleBytes);
+  await writeFile(join(data.root, "report.json"), JSON.stringify(data.report));
+}
+
 test("Active accepts a complete synthetic evidence bundle bound to the current runtime", async t => {
   const data = await fixture(t);
   await assert.doesNotReject(validateActiveEvidence(data.report, runtime, data.reportPath));
@@ -375,6 +528,84 @@ test("Active rejects transport PASS evidence without observing the requested can
 test("Active accepts an observed candidate model when the observed effort is explicitly unknown", async t => {
   const data = await fixture(t, config, undefined, "UNKNOWN");
   await assert.doesNotReject(validateActiveEvidence(data.report, runtime, data.reportPath));
+});
+
+test("Active rejects the retired four-field transport v1 asset", async t => {
+  const data = await fixture(t);
+  await replaceBundle(data.root, data.report, bundle => {
+    const manifest = bundle.evidence_manifest as Array<Record<string, unknown>>;
+    const transport = manifest.find(entry => entry.kind === "transport");
+    assert.ok(transport);
+    transport.schema_version = "jev-transport-evidence-v1";
+  });
+  await assert.rejects(validateActiveEvidence(data.report, runtime, data.reportPath), /manifest association or schema/);
+});
+
+test("Active rejects transport evidence when either bound source is missing", async t => {
+  const data = await fixture(t);
+  const bundle = JSON.parse(await readFile(data.bundlePath, "utf8")) as { evidence_manifest: Array<Record<string, unknown>> };
+  const transport = bundle.evidence_manifest.find(entry => entry.kind === "transport");
+  assert.ok(transport);
+  const asset = JSON.parse(await readFile(join(data.root, transport.path as string), "utf8")) as { facts: { sources: Array<{ path: string }> } };
+  await rm(join(data.root, asset.facts.sources[1].path));
+  await assert.rejects(validateActiveEvidence(data.report, runtime, data.reportPath), /transport evidence facts/);
+});
+
+test("Active rejects transport source metadata that does not match its composite facts", async t => {
+  const data = await fixture(t);
+  const bundle = JSON.parse(await readFile(data.bundlePath, "utf8")) as { evidence_manifest: Array<Record<string, unknown>> };
+  const transport = bundle.evidence_manifest.find(entry => entry.kind === "transport");
+  assert.ok(transport);
+  const asset = JSON.parse(await readFile(join(data.root, transport.path as string), "utf8")) as { facts: { sources: Array<{ path: string }> } };
+  const sourcePath = join(data.root, asset.facts.sources[0].path);
+  const source = JSON.parse(await readFile(sourcePath, "utf8")) as Record<string, unknown>;
+  source.candidate_id = "gpt-6-luna/medium";
+  await writeFile(sourcePath, JSON.stringify(source));
+  await assert.rejects(validateActiveEvidence(data.report, runtime, data.reportPath), /transport evidence facts/);
+});
+
+test("Active rejects transport timelines with broken pair, tool or caller-source links", async t => {
+  const pairMismatch = await fixture(t);
+  await replaceTransportFacts(pairMismatch, facts => {
+    const aba = facts.aba as Record<string, unknown>;
+    const calls = aba.calls as Array<Record<string, unknown>>;
+    calls[2].applied_pair = { model: candidate.model, effort: "medium" };
+  });
+  await assert.rejects(validateActiveEvidence(pairMismatch.report, runtime, join(pairMismatch.root, "report.json")), /transport evidence facts/);
+
+  const toolMismatch = await fixture(t);
+  await replaceTransportFacts(toolMismatch, facts => {
+    const aba = facts.aba as Record<string, unknown>;
+    const calls = aba.calls as Array<Record<string, unknown>>;
+    const links = aba.tool_continuations as Array<Record<string, unknown>>;
+    const replacement = `sha256:${sha256(Buffer.from("replacement-tool")).slice(0, 24)}`;
+    calls[1].tool_result_id_digest = replacement;
+    links[0].tool_result_id_digest = replacement;
+  });
+  await assert.rejects(validateActiveEvidence(toolMismatch.report, runtime, join(toolMismatch.root, "report.json")), /transport evidence facts/);
+
+  const proposedMismatch = await fixture(t);
+  await replaceTransportFacts(proposedMismatch, facts => {
+    const aba = facts.aba as Record<string, unknown>;
+    const calls = aba.calls as Array<Record<string, unknown>>;
+    calls[1].proposed_pair = candidate;
+  });
+  await assert.rejects(validateActiveEvidence(proposedMismatch.report, runtime, join(proposedMismatch.root, "report.json")), /transport evidence facts/);
+
+  const guardMismatch = await fixture(t);
+  await replaceTransportFacts(guardMismatch, facts => {
+    const aba = facts.aba as Record<string, unknown>;
+    const calls = aba.calls as Array<Record<string, unknown>>;
+    calls[0].guard_verdict = "deny";
+  });
+  await assert.rejects(validateActiveEvidence(guardMismatch.report, runtime, join(guardMismatch.root, "report.json")), /transport evidence facts/);
+
+  const callerMismatch = await fixture(t);
+  await replaceTransportFacts(callerMismatch, facts => {
+    const callerEdge = facts.caller_edge as Record<string, unknown>;
+    callerEdge.source_ref = "e".repeat(64);
+  });
+  await assert.rejects(validateActiveEvidence(callerMismatch.report, runtime, join(callerMismatch.root, "report.json")), /transport evidence facts/);
 });
 
 test("Active accepts two fully evidenced candidates sharing the same baseline quality assets", async t => {

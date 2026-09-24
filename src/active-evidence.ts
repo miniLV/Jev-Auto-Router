@@ -23,13 +23,16 @@ export interface ActiveEvidenceBinding {
 const REPORT_SCHEMA = "jev-paired-evaluation-report-v2";
 const BUNDLE_SCHEMA = "jev-active-evaluation-bundle-v1";
 const ASSET_SCHEMAS: Record<string, string> = {
-  transport: "jev-transport-evidence-v1",
+  transport: "jev-transport-evidence-v2",
   cancellation: "jev-cancellation-evidence-v1",
   shadow: "jev-shadow-evidence-v1",
   diff: "jev-quality-evidence-v1",
   test: "jev-quality-evidence-v1",
   artifact: "jev-quality-evidence-v1",
 };
+const TRANSPORT_SOURCE_SCHEMA = "jev-transport-source-v1";
+const TRANSPORT_SOURCE_KIND = "transport_source";
+const MAX_TRANSPORT_SOURCE_BYTES = 256 * 1024;
 const ELIGIBILITY_GATES = ["transport", "cancellation", "shadow", "quality", "cost"] as const;
 
 /** Active accepts only an evaluator report reproduced from its saved, file-backed input bundle. */
@@ -203,7 +206,7 @@ async function validateEvidenceManifest(
         asset.association_id !== expectedAsset.associationId) {
       throw new Error("Active evidence asset association or schema does not match its manifest");
     }
-    const phase = validateAssetFacts(kind, asRecord(asset.facts, "Active evidence asset facts are invalid"), expectedAsset, config);
+    const phase = await validateAssetFacts(kind, asRecord(asset.facts, "Active evidence asset facts are invalid"), expectedAsset, config, bundleRoot);
     if (phase && expectedAsset.candidateId !== null) {
       const phases = cancellationPhases.get(expectedAsset.candidateId) ?? new Set<string>();
       phases.add(phase);
@@ -299,20 +302,208 @@ function requireQualityRefs(
   }
 }
 
-function validateAssetFacts(
+async function validateTransportFacts(
+  facts: Record<string, unknown>,
+  expected: ExpectedAsset,
+  config: HarnessConfig,
+  bundleRoot: string,
+): Promise<void> {
+  try {
+    if (expected.candidateId === null || !hasExactKeys(facts, [
+      "release_id", "candidate_id", "configuration_digest", "association_id", "caller_edge", "aba", "sse", "json", "compaction", "sources",
+    ])) throw new Error();
+    const candidateId = expected.candidateId;
+    const configurationDigest = digest(config);
+    if (facts.release_id !== config.release || facts.candidate_id !== candidateId ||
+        facts.configuration_digest !== configurationDigest || facts.association_id !== expected.associationId) throw new Error();
+
+    const callerEdge = asRecord(facts.caller_edge, "Active transport evidence facts are invalid");
+    if (!hasExactKeys(callerEdge, ["id", "authenticated", "recursive", "source_ref"]) ||
+        callerEdge.id !== config.callerEdgeId || callerEdge.authenticated !== true || callerEdge.recursive !== false ||
+        !isDigest(callerEdge.source_ref)) throw new Error();
+
+    const aba = asRecord(facts.aba, "Active transport evidence facts are invalid");
+    validateAbaFacts(aba, candidateId, config);
+    const sse = asRecord(facts.sse, "Active transport evidence facts are invalid");
+    validateSseFacts(sse, aba);
+    const json = asRecord(facts.json, "Active transport evidence facts are invalid");
+    validateJsonFacts(json);
+    const compaction = asRecord(facts.compaction, "Active transport evidence facts are invalid");
+    validateCompactionFacts(compaction, candidateId, aba, config);
+    await validateTransportSources(facts.sources, candidateId, expected.associationId, config, { aba, sse, json, compaction, callerEdge }, bundleRoot);
+  } catch {
+    throw new Error("Active transport evidence facts are invalid");
+  }
+}
+
+function validateAbaFacts(aba: Record<string, unknown>, candidateId: string, config: HarnessConfig): void {
+  if (!hasExactKeys(aba, ["run_id", "session_id", "calls", "tool_continuations", "terminal_status"]) ||
+      !isOpaqueId(aba.run_id) || !isSessionId(aba.session_id) || aba.terminal_status !== "completed") throw new Error();
+  const calls = asRecordArray(aba.calls, "Active transport evidence facts are invalid");
+  if (calls.length !== 3) throw new Error();
+  const models: string[] = [];
+  const choiceIds = new Set<string>();
+  let previousCompletion: unknown;
+  for (const [index, call] of calls.entries()) {
+    if (!hasExactKeys(call, ["sequence", "response_mode", "guard_verdict", "proposed_pair", "requested_pair", "applied_pair", "observed_pair", "jev_request_version", "jev_resolved_version", "request_at", "completion_at", "http_status", "terminal_status", "physical_request_count", "choice_id_digest", "tool_call_id_digest", "tool_result_id_digest"]) ||
+        call.sequence !== index + 1 || !isRealPair(call.proposed_pair) || !isRealPair(call.requested_pair) || !isRealPair(call.applied_pair) ||
+        !isPairKey(call.applied_pair, pairKeyOrUndefined(call.requested_pair) as string) ||
+        !isPairKey(call.proposed_pair, pairKeyOrUndefined(call.applied_pair) as string) ||
+        (call.response_mode !== "sse" && call.response_mode !== "json") || call.guard_verdict !== "allow" || !isObservedPair(call.observed_pair) || !isHttpSuccess(call.http_status) ||
+        call.jev_request_version !== config.jevVersion || call.jev_resolved_version !== config.jevVersion ||
+        !isTimestamp(call.request_at) || !isTimestamp(call.completion_at) || !isBefore(call.request_at, call.completion_at) ||
+        (previousCompletion !== undefined && !isBeforeOrEqual(previousCompletion, call.request_at)) ||
+        call.terminal_status !== "completed" || call.physical_request_count !== 1 || !isDigestToken(call.choice_id_digest) ||
+        (!isToolDigestToken(call.tool_call_id_digest)) || (index === 0 ? call.tool_result_id_digest !== null : !isToolDigestToken(call.tool_result_id_digest)) ||
+        choiceIds.has(call.choice_id_digest as string)) throw new Error();
+    const requested = call.requested_pair as Record<string, unknown>;
+    const observed = call.observed_pair as Record<string, unknown>;
+    if (observed.model !== requested.model || (observed.effort !== requested.effort && observed.effort !== "UNKNOWN")) throw new Error();
+    models.push(requested.model as string);
+    choiceIds.add(call.choice_id_digest as string);
+    previousCompletion = call.completion_at;
+  }
+  const candidate = pairFromKey(candidateId);
+  if (pairKeyOrUndefined(calls[0].requested_pair) !== pairKeyOrUndefined(calls[2].requested_pair) ||
+      pairKeyOrUndefined(calls[0].applied_pair) !== pairKeyOrUndefined(calls[2].applied_pair) ||
+      models[0] !== models[2] || models[0] === models[1] || models.some(model => model === "jev/auto") ||
+      !calls.some(call => pairKeyOrUndefined(call.proposed_pair) === candidateId && pairKeyOrUndefined(call.requested_pair) === candidateId &&
+        pairKeyOrUndefined(call.applied_pair) === candidateId && isObservedCandidate(call.observed_pair, candidate)) ||
+      !calls.some(call => {
+        const observed = call.observed_pair as Record<string, unknown>;
+        return observed.model === candidate.model && (observed.effort === candidate.effort || observed.effort === "UNKNOWN");
+      })) throw new Error();
+  const continuations = asRecordArray(aba.tool_continuations, "Active transport evidence facts are invalid");
+  if (continuations.length !== 2) throw new Error();
+  for (const [index, continuation] of continuations.entries()) {
+    if (!hasExactKeys(continuation, ["from_call", "to_call", "tool_call_id_digest", "tool_result_id_digest"]) ||
+        continuation.from_call !== index + 1 || continuation.to_call !== index + 2 ||
+        !isToolDigestToken(continuation.tool_call_id_digest) || !isToolDigestToken(continuation.tool_result_id_digest) ||
+        continuation.tool_call_id_digest !== continuation.tool_result_id_digest) throw new Error();
+    const from = calls[index];
+    const to = calls[index + 1];
+    if (continuation.tool_call_id_digest !== from.tool_call_id_digest || continuation.tool_result_id_digest !== to.tool_result_id_digest) throw new Error();
+  }
+}
+
+function validateSseFacts(sse: Record<string, unknown>, aba: Record<string, unknown>): void {
+  if (!hasExactKeys(sse, ["call_sequence", "status", "first_increment_at", "completion_at", "upstream_end_at", "event_order", "terminal_status", "first_increment_before_completion"]) ||
+      sse.call_sequence !== 1 || !isHttpSuccess(sse.status) || sse.terminal_status !== "completed" || sse.first_increment_before_completion !== true ||
+      !hasEventOrder(sse.event_order) || !isBefore(sse.first_increment_at, sse.completion_at) ||
+      !isBeforeOrEqual(sse.completion_at, sse.upstream_end_at) ||
+      (asRecordArray(aba.calls, "Active transport evidence facts are invalid")[0].response_mode !== "sse") ||
+      asRecordArray(aba.calls, "Active transport evidence facts are invalid")[0].http_status !== sse.status ||
+      !isBeforeOrEqual(asRecordArray(aba.calls, "Active transport evidence facts are invalid")[0].request_at, sse.first_increment_at) ||
+      sse.completion_at !== asRecordArray(aba.calls, "Active transport evidence facts are invalid")[0].completion_at) throw new Error();
+}
+
+function validateJsonFacts(json: Record<string, unknown>): void {
+  if (!hasExactKeys(json, ["probe_id_digest", "request_at", "completion_at", "status", "headers_digest", "body_digest", "terminal_status"]) ||
+      !isDigestToken(json.probe_id_digest) || !isTimestamp(json.request_at) || !isTimestamp(json.completion_at) ||
+      !isBefore(json.request_at, json.completion_at) || !isHttpSuccess(json.status) || !isDigestToken(json.headers_digest) ||
+      !isDigestToken(json.body_digest) || json.terminal_status !== "completed") throw new Error();
+}
+
+function validateCompactionFacts(compaction: Record<string, unknown>, candidateId: string, aba: Record<string, unknown>, config: HarnessConfig): void {
+  if (!hasExactKeys(compaction, [
+    "run_id", "session_id", "event_id_digest", "occurred_at", "new_choice_id_digest", "jev_request_version", "jev_resolved_version", "new_choice_at", "request_at", "completion_at",
+    "tool_continuation", "proposed_pair", "requested_pair", "applied_pair", "observed_pair", "guard_verdict", "http_status", "terminal_status", "physical_request_count",
+    "new_choice",
+  ]) || !isOpaqueId(compaction.run_id) || !isSessionId(compaction.session_id) || !isDigestToken(compaction.event_id_digest) ||
+      !isDigestToken(compaction.new_choice_id_digest) || compaction.jev_request_version !== config.jevVersion || compaction.jev_resolved_version !== config.jevVersion ||
+      !isTimestamp(compaction.occurred_at) || !isTimestamp(compaction.new_choice_at) ||
+      !isTimestamp(compaction.request_at) || !isTimestamp(compaction.completion_at) || !isBefore(compaction.occurred_at, compaction.new_choice_at) ||
+      !isBefore(compaction.new_choice_at, compaction.request_at) || !isBeforeOrEqual(compaction.request_at, compaction.completion_at) ||
+      !isRealPair(compaction.proposed_pair) || !isPairKey(compaction.proposed_pair, candidateId) ||
+      !isRealPair(compaction.requested_pair) || !isPairKey(compaction.requested_pair, candidateId) ||
+      !isRealPair(compaction.applied_pair) || !isPairKey(compaction.applied_pair, candidateId) ||
+      pairKeyOrUndefined(compaction.proposed_pair) !== pairKeyOrUndefined(compaction.applied_pair) ||
+      !isObservedPair(compaction.observed_pair) ||
+      compaction.guard_verdict !== "allow" ||
+      !isHttpSuccess(compaction.http_status) || compaction.terminal_status !== "completed" || compaction.physical_request_count !== 1 ||
+      compaction.new_choice !== true) throw new Error();
+  const observed = compaction.observed_pair as Record<string, unknown>;
+  const candidate = pairFromKey(candidateId);
+  if (observed.model !== candidate.model || (observed.effort !== candidate.effort && observed.effort !== "UNKNOWN")) throw new Error();
+  const continuation = asRecord(compaction.tool_continuation, "Active transport evidence facts are invalid");
+  if (!hasExactKeys(continuation, ["tool_call_id_digest", "tool_result_id_digest", "before_session_id", "after_session_id"]) ||
+      !isToolDigestToken(continuation.tool_call_id_digest) || !isToolDigestToken(continuation.tool_result_id_digest) ||
+      continuation.tool_call_id_digest !== continuation.tool_result_id_digest ||
+      !isSessionId(continuation.before_session_id) || !isSessionId(continuation.after_session_id) ||
+      continuation.before_session_id !== compaction.session_id || continuation.after_session_id !== compaction.session_id) throw new Error();
+  const calls = asRecordArray(aba.calls, "Active transport evidence facts are invalid");
+  if (calls.some(call => call.choice_id_digest === compaction.new_choice_id_digest)) throw new Error();
+}
+
+async function validateTransportSources(
+  value: unknown,
+  candidateId: string,
+  associationId: string,
+  config: HarnessConfig,
+  phaseFacts: {
+    aba: Record<string, unknown>;
+    sse: Record<string, unknown>;
+    json: Record<string, unknown>;
+    compaction: Record<string, unknown>;
+    callerEdge: Record<string, unknown>;
+  },
+  bundleRoot: string,
+): Promise<void> {
+  const sources = asRecordArray(value, "Active transport evidence facts are invalid");
+  if (sources.length !== 2 || new Set(sources.map(source => source.phase)).size !== 2 ||
+      !sources.every(source => source.phase === "aba" || source.phase === "compaction")) throw new Error();
+  const seenPaths = new Set<string>();
+  for (const source of sources) {
+    if (!hasExactKeys(source, [
+      "phase", "path", "sha256", "release_id", "candidate_id", "configuration_digest", "association_id", "run_id", "session_id",
+    ]) || source.release_id !== config.release || source.candidate_id !== candidateId || source.configuration_digest !== digest(config) ||
+        source.association_id !== associationId || !isOpaqueId(source.run_id) || !isSessionId(source.session_id) ||
+        !isDigest(source.sha256) || typeof source.path !== "string" || source.path.length > 256 || seenPaths.has(source.path)) throw new Error();
+    seenPaths.add(source.path);
+    const path = await resolveContainedFile(bundleRoot, source.path, "transport evidence source");
+    const bytes = await readContainedFile(path, "transport evidence source");
+    if (bytes.length > MAX_TRANSPORT_SOURCE_BYTES || sha256(bytes) !== source.sha256) throw new Error();
+    let document: Record<string, unknown>;
+    try {
+      document = asRecord(JSON.parse(bytes.toString("utf8")), "Active transport evidence source is invalid");
+    } catch {
+      throw new Error();
+    }
+    if (!hasExactKeys(document, [
+      "schema_version", "kind", "phase", "release_id", "candidate_id", "configuration_digest", "association_id", "run_id", "session_id", "facts",
+    ]) || document.schema_version !== TRANSPORT_SOURCE_SCHEMA || document.kind !== TRANSPORT_SOURCE_KIND ||
+        document.phase !== source.phase || document.release_id !== source.release_id || document.candidate_id !== source.candidate_id ||
+        document.configuration_digest !== source.configuration_digest || document.association_id !== source.association_id ||
+        document.run_id !== source.run_id || document.session_id !== source.session_id) throw new Error();
+    const documentFacts = asRecord(document.facts, "Active transport evidence source is invalid");
+    const expectedFacts = source.phase === "aba"
+      ? {
+          aba: phaseFacts.aba,
+          sse: phaseFacts.sse,
+          json: phaseFacts.json,
+          caller_edge: {
+            id: phaseFacts.callerEdge.id,
+            authenticated: phaseFacts.callerEdge.authenticated,
+            recursive: phaseFacts.callerEdge.recursive,
+          },
+        }
+      : { compaction: phaseFacts.compaction };
+    const phase = source.phase === "aba" ? phaseFacts.aba : phaseFacts.compaction;
+    if (source.run_id !== phase.run_id || source.session_id !== phase.session_id) throw new Error();
+    if (!hasExactKeys(documentFacts, Object.keys(expectedFacts)) || jsonDigest(documentFacts) !== jsonDigest(expectedFacts)) throw new Error();
+    if (source.phase === "aba" && phaseFacts.callerEdge.source_ref !== source.sha256) throw new Error();
+  }
+}
+
+async function validateAssetFacts(
   kind: string,
   facts: Record<string, unknown>,
   expected: ExpectedAsset,
   config: HarnessConfig,
-): string | undefined {
+  bundleRoot: string,
+): Promise<string | undefined> {
   if (kind === "transport") {
-    if (expected.candidateId === null) throw new Error("Active transport evidence is not associated with a candidate");
-    const requestedPair = pairFromKey(expected.candidateId);
-    if (!hasExactKeys(facts, ["requested_pair", "observed_model", "observed_effort", "first_event_before_completion"]) ||
-        !isPairKey(facts.requested_pair, expected.candidateId) ||
-        facts.observed_model !== requestedPair.model ||
-        (facts.observed_effort !== requestedPair.effort && facts.observed_effort !== "UNKNOWN") ||
-        facts.first_event_before_completion !== true) throw new Error("Active transport evidence facts are invalid");
+    await validateTransportFacts(facts, expected, config, bundleRoot);
     return undefined;
   }
   if (kind === "cancellation") {
@@ -450,6 +641,66 @@ function hasText(value: unknown): value is string {
 
 function isDigest(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function isDigestToken(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+}
+
+function isToolDigestToken(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[0-9a-f]{24}$/.test(value);
+}
+
+function isOpaqueId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(value);
+}
+
+function isSessionId(value: unknown): value is string {
+  return isDigestToken(value);
+}
+
+function isRealPair(value: unknown): value is Record<string, unknown> {
+  if (!isPairKey(value, pairKeyOrUndefined(value) ?? "")) return false;
+  const pair = value as Record<string, unknown>;
+  return isRealModel(pair.model) && pair.effort !== "";
+}
+
+function isObservedPair(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value) ||
+      !hasExactKeys(value as Record<string, unknown>, ["model", "effort"])) return false;
+  const pair = value as Record<string, unknown>;
+  return typeof pair.model === "string" && isRealModel(pair.model) &&
+    (typeof pair.effort === "string" && pair.effort.length > 0);
+}
+
+function isObservedCandidate(value: unknown, candidate: ModelEffortPair): boolean {
+  if (!isObservedPair(value)) return false;
+  const observed = value as Record<string, unknown>;
+  return observed.model === candidate.model && (observed.effort === candidate.effort || observed.effort === "UNKNOWN");
+}
+
+function isRealModel(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value !== "UNKNOWN" && value !== "jev/auto" && !value.startsWith("jev/");
+}
+
+function isHttpSuccess(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 200 && (value as number) < 300;
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isBefore(left: unknown, right: unknown): boolean {
+  return isTimestamp(left) && isTimestamp(right) && Date.parse(left) < Date.parse(right);
+}
+
+function isBeforeOrEqual(left: unknown, right: unknown): boolean {
+  return isTimestamp(left) && isTimestamp(right) && Date.parse(left) <= Date.parse(right);
+}
+
+function hasEventOrder(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 3 && value[0] === "first_increment" && value[1] === "completion" && value[2] === "upstream_end";
 }
 
 function sha256(value: Uint8Array): string {

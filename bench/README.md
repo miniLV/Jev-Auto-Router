@@ -88,15 +88,34 @@ must match the evaluated inputs.
 
 Assets are JSON objects with exactly `schema_version`, `kind`, `release_id`,
 `candidate_id`, `configuration_digest`, `association_id` and `facts`. Accepted
-kinds and schema versions are `transport/jev-transport-evidence-v1`,
+kinds and schema versions are `transport/jev-transport-evidence-v2`,
 `cancellation/jev-cancellation-evidence-v1`, `shadow/jev-shadow-evidence-v1`,
-and `diff`, `test` or `artifact` with `jev-quality-evidence-v1`. Transport facts
-bind the requested pair to the observed candidate model and observed effort
-(the effort may explicitly be `UNKNOWN`); cancellation facts separately cover
-Jev wait and upstream generation; Shadow facts bind the proposed pair to the
-executed baseline; quality facts bind the frozen task, arm, acceptance ID,
-review method and outcome metrics. Unknown kinds, versions, fields or
-associations are rejected.
+and `diff`, `test` or `artifact` with `jev-quality-evidence-v1`. Transport v2
+is one composite candidate asset. Its exact facts bind release, candidate,
+configuration and association IDs to an authenticated, non-recursive caller
+edge; a three-call, completed A→B→A timeline with proposed/requested/applied/
+observed pairs, fixed Jev request/resolved versions, ordered request/completion
+timestamps, one physical request per call and two tool-call/result digest
+continuations whose call/result digests must match the same native call ID;
+ordered SSE first increment/completion/upstream-end events; a
+separate nonstreaming JSON probe with request/completion timestamps, status,
+related-header digest and body digest; and a compaction event that
+precedes a distinct new Jev Choice and a continued candidate call. The effort
+in an authoritative observed pair may explicitly be `UNKNOWN` and is never
+inferred from the request. Each transport asset also names exactly one `aba`
+and one `compaction` `jev-transport-source-v1` sidecar. Source paths are
+contained relative paths, and each source file repeats release, candidate,
+configuration, association, run and session bindings; Active verifies its raw
+byte digest and that its restricted phase facts equal the composite facts. The
+caller-edge source reference must equal the ABA source file digest, whose
+restricted facts repeat the authenticated/non-recursive assertion.
+The ABA and compaction source runs may use different sessions; compaction
+proves its own same-session pre/post tool chain.
+Cancellation facts separately cover Jev wait and upstream generation; Shadow
+facts bind the proposed pair to the executed baseline; quality facts bind the
+frozen task, arm, acceptance ID, review method and outcome metrics. Unknown
+kinds, versions, fields or associations are rejected. The retired transport
+v1 four-field asset cannot approve Active.
 
 Generate and save the report with:
 
