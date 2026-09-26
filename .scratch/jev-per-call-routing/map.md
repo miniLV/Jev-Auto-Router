@@ -1,5 +1,7 @@
 # 方案 A：review 后修复与验收路线图
 
+新增 [Issue 28](issues/28-semantic-task-complexity-routing.md) 跟踪可信的语义复杂度信号：认证来源 → 隐私契约 → 实现与独立评估。当前为 `needs-info`；它不改变 08/21–25 的实机验收，也不使现有 Issue 24 自动成为复杂度评估。
+
 本地图用于派发 [方案 A spec](spec.md) 的后续工作。原 Issue 01–07 保持原文和原状态；新增 Issue 08–25 把 2026-09-23 架构 review 的缺陷与尚缺的真实证据拆成可独立执行的小票。单张票的 `Blocks:` 是对原票或后续票的反向索引；不要只看原 Issue 06/07 文件中的旧 `Blocked by:` 就提前结项。
 
 ## 代码与协议修复
