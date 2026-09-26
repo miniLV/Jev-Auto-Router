@@ -20,15 +20,17 @@ RoutingState {
     tool_name, exit_status,
     error_codes[], error_digest? // fixed-length digest, never raw text
   },
-  user_turn_facts?,              // bounded allowlisted facts
+  question?,                     // current final user question, only when explicitly admitted
   correction_facts?              // bounded failure facts from verification
 }
 ~~~
 
 `RoutingState` is the entire payload Jev receives. It is constructed under
-the privacy send policy: text fields are untrusted data, sensitive content
-is refused rather than truncated, and a call with no send eligibility never
-reaches Jev. The session itself never leaves the host.
+the privacy send policy: the current final user question is the only raw text
+exception and must pass the 8 KiB UTF-8 cap and secret checks; history, tools,
+files, images, mixed content and credentials remain ineligible. Sensitive or
+malformed content is refused rather than truncated, and a call with no send
+eligibility never reaches Jev.
 
 ## Candidate pairs
 

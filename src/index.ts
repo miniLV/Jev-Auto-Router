@@ -349,20 +349,11 @@ export function createRouterServer(
         res.on("close", () => {
           if (!res.writableEnded && !responseStreamFailed) cancellation.abort();
         });
-        const userInput = step === "user_turn" && Array.isArray(body.input)
-          ? JSON.stringify(body.input)
-          : undefined;
         const result = await proxy.routeCall({
           task_id: taskId,
           step_type: step,
           request: body,
           current_model: header(req.headers["x-jev-current-model"]),
-          // Shape-only user-turn fact: the native input is bucketed locally,
-          // and only the bucket ever leaves for Jev.
-          user_turn: userInput === undefined ? undefined : { request_text: userInput },
-          // Inspect user input locally for secrets; only its length bucket can
-          // enter Routing State, and the original body still passes to the edge.
-          raw_hints: userInput === undefined ? undefined : [userInput],
           context_size_bucket: parseBucket(header(req.headers["x-jev-context-size-bucket"])),
           forced_model: header(req.headers["x-jev-forced-model"]),
           astra_mandate: parseBooleanHeader(header(req.headers["x-jev-astra-mandate"])),

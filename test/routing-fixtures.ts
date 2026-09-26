@@ -162,7 +162,7 @@ export class RecordingUpstream {
 }
 
 export function sampleRequest(model = AUTO_MODEL): ResponsesRequest {
-  return { model, input: [], tools: [], stream: true };
+  return { model, input: [{ type: "message", role: "user", content: "fixture question" }], tools: [], stream: true };
 }
 
 export async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {

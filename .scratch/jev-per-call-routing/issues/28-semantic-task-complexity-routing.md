@@ -1,12 +1,12 @@
 # 28 — 建立可审计的语义任务复杂度信号，再评估复杂度路由
 
-**What to build:** 在现有请求形状事实之外，建立一个来源、隐私边界、版本和失败语义都可核对的非内容型任务复杂度信号契约；只有契约冻结并完成实现后，才预注册复杂度路由评估。长度桶不能代替语义复杂度，也不能直接成为新的生产选模依据。
+**What to build:** 在用户明确授权的窄范围内，把当前 Responses 请求中的用户问题作为一次 Jev Choice 的输入信号；冻结来源、隐私边界、版本和拒绝语义，并为后续独立复杂度评估留下可核对的预注册计划。长度桶不再作为用户问题信号，也不能直接成为新的生产选模依据。
 
 Type: task
 
-Blocked by: 外部条件 — 尚无已证明的认证 producer、获准的语义来源和独立评估安排；在这些条件齐备前，本票只保留门禁和停止规则。
+Blocked by: 外部条件 — 真实认证 caller edge、独立下游质量评估和可复核的复杂度标注仍未提供；运行时实现已完成，但这些条件齐备前不能宣称生产 Active 或复杂度路由收益。
 
-Blocks: 后续语义复杂度路由实现与生产阈值决定；Issue 24 的评估框架只能在本票完成实现和契约冻结后复用或扩展。
+Blocks: 后续语义复杂度路由阈值决定；Issue 24 的评估框架只能在本票实现和契约冻结后按预注册计划复用或扩展。
 
 Status: needs-info
 
@@ -14,45 +14,50 @@ Related: [spec.md §4](../../../spec.md#4-routing-state-and-privacy)、[spec.md 
 
 ## Problem
 
-当前 `src/route-plan.ts` 的 `RoutingState` 只有 `step_type`、已知的 `current_model`、`context_size_bucket` 和 `user_turn_facts.request_length_bucket`。`src/index.ts` 从请求头读取有限控制值，并在本地把 user-turn 输入做敏感检查和长度分桶；原始输入继续送往 caller edge，但不会作为 Jev Routing State。`src/jev-adapter.ts` 将该状态和 Candidate Pair IDs 发给 Jev，执行一次 pair Choice；现有契约没有语义复杂度字段或可信的复杂度 producer。
+此前 `src/route-plan.ts` 只把 user-turn 输入转换为 `request_length_bucket`，这不能区分长度相近但难度不同的问题，也不应继续作为语义复杂度代理。当前实现将用户明确选择的当前问题写入版本化 `RoutingState.question`，由 `src/jev-adapter.ts` 连同 Candidate Pair IDs 发给一次 Jev Choice；它不是本地分类器，也不是第二个 selector。
 
-入口收到的 `x-jev-*` 控制信号仍是请求方输入，即使部分字段经过枚举、模型目录或布尔值校验，也不能据此证明复杂度判断来自独立、认证的 producer。当前仓库没有建立这样的 producer edge，也没有证明某个 header 或请求 payload 能独立于 caller 伪造。
+入口收到的 `x-jev-*` 控制信号仍是请求方输入，不能伪造当前问题的来源或改变提取结果。路由器只从共享 `ResponsesProxy.routeCall` 收到的原生 `request.input` 提取问题；单独提供的 `user_turn` 字段被忽略，不能绕过边界。真实 caller edge 和独立质量结果仍没有在本地 fixture 之外得到证明。
 
-根规范和运行时策略只允许获准的结构化事实；原始指令、文件内容、工具输出、完整会话、凭据和认证材料禁止外发。规范 §11 和策略 §11 还明确排除本地语义分类器、task-kind 表、tier ladder 和第二次 Choice。因此，增加复杂度路由前必须先解决来源和隐私契约，不能把长度桶、请求方自报字段或本地启发式当作语义事实。
+根规范和运行时策略现在只允许这一条窄路径：顶层非空字符串，或数组最后一个 `type:message`、`role:user` 项中的非空字符串/纯 `input_text` 文本片段。历史项、工具、文件、图片、未知或混合内容不进入 Jev；原始会话、文件内容、工具输出、凭据和认证材料继续禁止外发。规范 §11 和策略 §11 仍排除本地语义分类器、task-kind 表、tier ladder 和第二次 Choice。
 
 ## Solution
 
-按以下顺序推进；前一步未满足时不得进入下一步。
+### 已实现的运行时契约
 
-1. **证明独立、认证的 producer。** 由维护者提供可核对的 producer 身份、认证方式、允许的 endpoint/版本、调用关联和非递归边界。说明它在可信本地边界内究竟观察什么有任务含义的事实、如何从中产生复杂度信号，以及为何同样长度但难度不同的任务不会被迫得到相同判断。证明复杂度信号不能由 caller 提供的 header、请求 body 或工具结果直接注入或改写；记录 producer 未知、认证失败、版本漂移和响应不可验证时的处理。没有这项证明，保持 `needs-info`，不改运行时。
-2. **选择非内容型来源并核对隐私适配。** 维护者先决定信号来自哪个获准的结构化观察源，冻结字段含义、来源、大小、时效和关联方式。把该契约逐项映射到现有 allowlist；原始 prompt、文件、工具文本、完整会话和凭据继续禁止外发，截断也不构成授权。若用户选择发送脱敏摘要或原文，必须作为超出现有规则的单独政策变更审查，不能由本票默许。若选定来源超出现有隐私政策，先取得用户对该范围的明确批准，再另行修改规范/策略；在来源选择和政策适配未完成前不得实现。
-3. **冻结版本化枚举和拒绝语义。** 在实现前冻结复杂度 enum 的精确版本和值域，以及缺失、`UNKNOWN`、畸形、过期、版本不匹配、认证失败和 producer 不可达时的行为。未知值不能静默映射到某一等级，不能从长度、confidence 或模型自报推断；是否进入 Jev、记录何种 reason、何时使用 Fallback Baseline 必须是可测试的固定契约。producer/Jev confidence 单独记录，绝不能当作质量分数或完成证据。
-4. **仅在前三项通过后实现。** 实现范围才可以包括必要的 Routing State/schema、producer 适配、Guard、记录和行为测试，并保持单次版本化 Choice、allowlisted state、仅修改 `model`/`reasoning.effort` 的 Apply 及现有回退边界。不得新增本地语义分类器、task-kind 表、第二个 selector 或绕过认证 caller edge。生产 Active 和生产阈值继续关闭，直到下一步评估完成。
-5. **实现前冻结评估计划，再运行真实结果。** 预注册 producer/source/schema 版本、Candidate Pairs、Fallback Baseline、Jev/policy/caller-edge/release 绑定、任务与仓库快照、标签方法、阈值、缺失值规则和分析顺序。样本至少包含：
-   - 与路由执行者和 Jev 分离的人工任务复杂度标签，说明标注时点、盲法/偏倚和争议处理；样本必须覆盖短而难、长而易及长度接近但复杂度不同的任务；
-   - 实际下游结果，包括完成/接受、独立质量、返工、失败、接管、验证和必要的交付证据；
-   - 预先定义的 under-route 与 over-route 判定，并按复杂度标签、实际结果和候选 pair 报告；
-   - 质量、完整成本和端到端/JeV 延迟，保留 Jev、模型调用、缓存、重试、失败和验证开销；
-   - 未知信号、缺失标签/结果、未覆盖复杂度枚举、无可比候选和其他 missing coverage，均单独计数并保持 `UNKNOWN`。
+1. `ResponsesProxy.routeCall` 从原生 `request.input` 提取当前问题，支持顶层非空字符串，以及最后一个用户消息中的非空字符串或纯 `input_text` 文本片段；消息的 `id`/`status` 元数据会被忽略。
+2. 只有最后一个数组项有资格成为问题。历史、工具、文件、图片、未知或混合内容、空值、畸形值、敏感值和超过 **8 KiB UTF-8** 的问题统一走 `privacy_refusal` 与 Fallback Baseline，原生请求仍完整转发且不截断。
+3. `question` 只出现在由原生 user-turn 派生的 Jev 状态中；tool-step 不携带它。`RouteCallInput.user_turn` 仅为兼容旧调用保留并被忽略，不能注入文本。Jev 之外的记录、错误、遥测和 Dashboard 不保存问题原文。
+4. `routing-state/3`、`choice-pairs/3` 和 `per-call/2` 绑定这一隐私/Choice 变化；仍保持一次 Choice、确定性 Guard、只修改 `model`/`reasoning.effort` 和现有回退边界。
+5. HTTP-chain、代理、路由状态和安全测试覆盖正向字符串/数组路径、元数据、排除历史和工具内容、敏感/混合/未知/畸形/超限拒绝、认证头、原生上游保真和无遥测泄漏。
 
-   置信度是路由观测字段，质量来自独立验收和交付结果；两者必须分列。评估结果只能回答预注册的候选和阈值是否满足，不能声称全局最优。
+### 仍待外部条件
 
-6. **Issue 24 的时序。** 不修改现有 Issue 24，也不把它的空白/合成框架当作本票的来源或结果。只有 producer/source/privacy/schema 已实现并冻结、且实现通过行为验证后，才允许把本票的复杂度标签和结果字段接入 Issue 24 的未来评估框架。
+真实认证 caller edge、独立于路由执行者和 Jev 的人工复杂度标签、实际下游质量/交付结果，以及完整成本和延迟数据仍未提供。实现通过本地行为测试不等于生产 Active 资格，也不构成质量或节省结论。
+
+### 后续评估预注册（待真实运行前冻结）
+
+比较当前“问题原文输入 Jev”的路径与此前“仅长度桶”的基线；样本必须包含长度接近但人工复杂度不同、短而难和长而易的任务。运行前冻结 caller-edge、Jev、策略、schema、候选对、Fallback Baseline、仓库快照、样本顺序、独立标注方法、under-route/over-route 判定和阈值。由不参与路由执行的标注者记录复杂度标签，并分别收集完成/接受、独立质量、返工、失败/接管、验证证据、模型与 Jev 延迟、完整成本和缓存/重试开销；未知和缺失覆盖单独计数并保留 `UNKNOWN`。不在真实运行前填写标签、结果或 PASS。
+
+Issue 24 暂不修改；只有上述契约已实现并冻结、真实 caller edge 和独立结果可核对后，才把这些字段接入未来的配对评估。
 
 ## Stop rules
 
-只要缺少认证 producer 证明、来源选择、现有隐私政策适配或独立下游结果，立即停止在本票范围外扩展：不得修改 runtime、`spec.md`、runtime policy、Routing State/Choice schema、本地 classifier 或生产阈值；不得开启 Active、生成 allowlist 或声称复杂度路由最优。任何未知、缺失或无法独立核对的结果都保持缺口，不得补零、反填或改写成 PASS。
+在真实认证 caller edge、独立下游结果和预注册评估完成前，不得开启生产 Active、调整生产阈值、声称复杂度路由最优或把 Jev confidence 当作质量证据。任何未知、缺失或无法独立核对的结果都保持缺口，不得补零、反填或改写成 PASS；本票继续保持 `needs-info`。
 
 ## Acceptance criteria
 
-- [ ] 有独立于 caller header/body 的认证 producer 证明、allowlist、版本和非递归边界；伪造请求不能制造可接受的复杂度信号。
-- [ ] producer 的任务含义来源和生成方法可审查；在长度相近而人工复杂度标签不同的任务上，信号具有可测的区分能力，不能由长度或自报难度独自决定。
-- [ ] 维护者已选择非内容型来源，并证明其字段、大小、时效和关联符合现有隐私政策；超出政策的来源有单独的用户批准记录。
-- [ ] 复杂度 enum/schema 版本、精确值域、`UNKNOWN`、缺失、畸形、漂移、认证失败和拒绝/回退行为均已冻结并可测试。
-- [ ] 只有上述门禁完成后才有 runtime/schema/producer 适配实现；实现保留现有单次 Choice、Guard、Apply、认证 edge 和回退不变量。
-- [ ] 运行前已有可核对的评估计划，含独立人工复杂度标签、实际下游结果、under/over-route、质量、完整成本、延迟和 missing coverage；confidence 与质量分开。
-- [ ] 评估没有把缺失数据当零，也没有从 Jev confidence、模型自报或模型 mix 宣称质量、节省或最优；Issue 24 未在契约冻结前被修改或复用。
+- [x] 原生 `request.input` 是唯一问题来源；请求方 header/body 不能注入替代问题，旧 `user_turn` 字段不能绕过提取。
+- [x] 最后用户消息、元数据忽略、纯 `input_text`、工具/文件/图片/混合/未知拒绝、8 KiB 上限、敏感拒绝和原生回退行为已冻结并可测试。
+- [x] `RoutingState`、Choice 和策略版本已升级；实现保留单次 Choice、Guard、Apply、认证 caller edge 和固定基线不变量。
+- [x] HTTP-chain 和单元测试覆盖实际 Jev JSON、Jev 认证头、正反路径、上游保真和记录/遥测不泄漏。
+- [ ] 真实 caller edge 的认证/非递归证明与独立下游质量结果可核对；本地 fixture 不算该证据。
+- [ ] 真实运行前完成预注册并冻结独立复杂度标签、under/over-route、质量、完整成本、延迟、缺失值规则和阈值；不把 confidence 当质量。
+- [x] Issue 24 未被提前修改或复用；在外部门禁完成前不生成 PASS、Active 或节省结论。
 
 ## Boundaries and verification
 
-本票当前只新增本地 tracker 文档和 map 注册，不改 `src/`、根 `spec.md`、runtime policy、schema、classifier、生产配置或 Issue 24。维护者补齐前置输入后，按门禁逐项留下脱敏版本/摘要和独立证据；实现阶段再补 HTTP-chain、隐私、伪造 producer、未知/拒绝路径测试，并运行 `npm test`、`npm run typecheck` 和 `git diff --check`。本票未完成前不应标记 `resolved`。
+本次已修改 `src/`、根 `spec.md`、runtime policy、README/上下文说明、schema 版本和行为测试；未修改 Issue 24、生产 Active 配置或 `dist/`。已运行聚焦测试、类型检查和真实 Jev 接口的合成问题冒烟；后者只证明接口接受新版状态，不证明 Codex 执行质量。由于真实 caller edge 和独立评估仍缺失，Status 保持 `needs-info`，本票不标记 `resolved`。
+
+## Comments
+
+- 2026-09-26 实现复审：双轴 code review 的重复检查、显式纠正问题和常见认证凭据漏检已修复；`npm test` 通过 236 项，`npm run typecheck` 与 `git diff --check` 通过。`npm run bench:jev-smoke` 使用合成问题请求真实固定 Jev，5 个场景中 4 个获得有效 Choice、1 个因低置信度按规则回退；两个不同问题选中同一 pair，因此不能从冒烟结果推断复杂度区分能力或节省。仍需认证 caller edge、独立人工标签及真实下游结果。

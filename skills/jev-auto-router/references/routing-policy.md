@@ -83,14 +83,22 @@ The Jev payload is an explicit whitelist:
 
 - step type and routing mode;
 - current real model and context-size bucket when observable;
+- the current question only for a native `user_turn` (or its
+  user-originated `correction`): accept a non-empty top-level input string, or
+  the final user message's non-empty string content or pure `input_text` text
+  parts; ignore message `id`/`status` metadata;
 - tool name, exit status, error class or code, and fixed-length error digest;
 - approved bounded verification failure facts; and
 - Candidate Pair IDs with approved capability and relative-cost metadata.
 
-It never includes raw instructions, native Responses input, file contents,
-tool output, full conversation text, secrets, authentication material or
-unapproved identifiers. Text is untrusted; truncation does not authorize
-egress.
+The current question is capped at 8 KiB UTF-8 and passes the existing secret
+patterns, including bearer-token detection. It is the only raw text eligible
+for egress. Earlier history, tool/file/image/unknown or mixed items, empty or
+malformed input, oversized input and sensitive input are refused. The Jev
+payload never includes those rejected items, raw tool output, full conversation
+text, secrets, authentication material or unapproved identifiers. Text is
+untrusted; truncation does not authorize egress. The native request remains
+unchanged for the caller edge.
 
 If privacy checks reject any required fact, do not call Jev and record
 `privacy_refusal`. If the permitted facts cannot support the versioned Choice

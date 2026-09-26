@@ -79,7 +79,7 @@ export interface TaskRecord {
   critical_failure: boolean;
 }
 
-export const POLICY_VERSION = "per-call/1";
+export const POLICY_VERSION = "per-call/2";
 
 export interface CallRecordInput {
   task_id: string;

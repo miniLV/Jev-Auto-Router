@@ -88,7 +88,7 @@ Jev 不成为 Codex 的执行模型：它只在上游模型调用之前给本地
 - 路由器只构建当前认证 caller edge **已经实测可请求**的
   `(模型, reasoning effort)` 组合。Jev 对这些组合做**一次 Choice**；
   本地代码不添加任务类型表或第二个语义选路器。
-- 发给 Jev 的是经过发送资格检查的紧凑状态，例如当前步骤、工具错误摘要和当前模型。完整会话仍走 Codex 原生模型调用；原始 prompt 和工具输出默认不写入路由日志。
+- 发给 Jev 的是经过发送资格检查的状态，例如当前步骤、当前模型和工具错误摘要；用户明确授权的当前问题只在原生 user-turn 的最后用户消息符合解析、8 KiB UTF-8 上限和敏感检查时发送。历史、工具、文件、图片、混合内容和凭据不发送，问题原文不写入路由记录。
 - 生产路由使用经过验证的 Jev 固定版本。OFF、隐私拒绝、信息不足、
   超时、低置信或无效回答都使用同一个已实测固定基线，并留下各自原因；
   没有产品级默认组合。用户选择真实模型时始终绕过 Jev。
@@ -105,9 +105,9 @@ Choice；模型选择器或目录中可见不等于可执行。当前 tier 为
 
 ## 什么数据去哪里
 
-- **发给 Jev 的**只有通过发送资格检查的紧凑状态：步骤类型、当前模型、工具名、退出码、定长错误摘要。完整会话永不因路由外发。
+- **发给 Jev 的**只有通过发送资格检查的状态：步骤类型、当前模型、工具名、退出码、定长错误摘要，以及符合边界的当前问题原文。历史、工具、文件、图片、混合内容和凭据不因路由外发。
 - **上游模型调用**携带原生会话内容，与未安装代理时相同；代理不改写响应事件流。
-- **本地日志**默认不保存原始 prompt 与工具输出；敏感内容直接拒发（不是截断），无发送资格的调用跳过 Jev 走基线。
+- **本地日志**不保存问题原文、prompt 或工具输出；敏感、空、畸形和超限内容直接拒发（不是截断），无发送资格的调用跳过 Jev 走基线。
 
 ## 路由正确，还不等于任务完成
 
@@ -168,7 +168,7 @@ npm run bench:evaluate              # 汇总配对评估 JSON 报告（Active �
 | `GET /decisions` | 每次调用与任务的审计记录（无提示词或工具原文） |
 | `POST /__jev/task/<id>/verification` | 回报任务边界验收结果，关联路由记录 |
 
-控制信号通过 `x-jev-*` 请求头传入，不进入转发体：`x-jev-task-id`（必填）、`x-jev-step`（步骤类型）、`x-jev-current-model`、`x-jev-context-size-bucket`、`x-jev-forced-model`（硬约束单模型）、`x-jev-astra-mandate`（明确要求使用 Astra）、`x-jev-competing-authority`（存在其他路由权威时跳过 Jev）。每次调用的路由结果通过响应头 `x-jev-route`（`model:effort`）与 `x-jev-route-source` 返回。用户输入只在本地做敏感检查与长度分桶，仅分桶结果可进入路由状态。
+控制信号通过 `x-jev-*` 请求头传入，不进入转发体：`x-jev-task-id`（必填）、`x-jev-step`（步骤类型）、`x-jev-current-model`、`x-jev-context-size-bucket`、`x-jev-forced-model`（硬约束单模型）、`x-jev-astra-mandate`（明确要求使用 Astra）、`x-jev-competing-authority`（存在其他路由权威时跳过 Jev）。每次调用的路由结果通过响应头 `x-jev-route`（`model:effort`）与 `x-jev-route-source` 返回。用户问题从原生 `request.input` 的最后一个合格 user-turn 项提取，经过敏感检查与 8 KiB UTF-8 上限后才可进入路由状态；请求头不能替代它。
 
 ### 配置
 

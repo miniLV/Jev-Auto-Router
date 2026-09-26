@@ -20,7 +20,7 @@ import { choose, isAbortError, isPinnedJevVersion, type JevDecision, type JevPol
 import type { GuardReason } from "./policy-guard.js";
 import { validate } from "./policy-guard.js";
 import { buildCallRecord, type CallRecord, type TaskRecord } from "./receipt.js";
-import { buildRoutingState, factsSufficientForChoice, isBoundedModelId, type RoutingState } from "./route-plan.js";
+import { buildRoutingState, extractCurrentQuestion, factsSufficientForChoice, isBoundedModelId, type RoutingState } from "./route-plan.js";
 import { AUTO_MODEL, parseStepType, UNKNOWN, unknownUsage, type CallStatus, type EntryKind, type Mode, type RouteReason, type RouteSource, type StepType } from "./types.js";
 import {
   consumeAstraEligibility,
@@ -81,6 +81,10 @@ export interface RouteCallInput {
   request: ResponsesRequest;
   current_model?: string;
   context_size_bucket?: RoutingState["context_size_bucket"];
+  /**
+   * Legacy caller field retained for source compatibility. It is ignored;
+   * user-turn content is always derived from request.input below.
+   */
   user_turn?: { request_text: string };
   /** Bounded user text: sensitive check only, never sent. */
   raw_hints?: string[];
@@ -242,13 +246,22 @@ export class ResponsesProxy {
       return this.#baseline(input, callIndex, stepType, task, "jev_version_mismatch");
     }
 
-    // 3. Routing State: privacy and sufficiency gates happen before any Jev call.
+    // 3. Routing State: derive a current user question from the native request
+    //    itself. Caller-supplied user_turn text is intentionally ignored so it
+    //    cannot bypass the extraction or privacy gates.
+    const hasUserQuestion = requestedStepType === "user_turn" || requestedStepType === "correction";
+    const question = hasUserQuestion
+      ? extractCurrentQuestion(input.request.input)
+      : undefined;
+    if (hasUserQuestion && (!question || !question.eligible)) {
+      return this.#baseline(input, callIndex, stepType, task, "privacy_refusal");
+    }
     const { state, privacy } = buildRoutingState({
       step_type: stepType,
       known_model_ids: this.catalog.models.map(model => model.model),
       current_model: input.current_model,
       context_size_bucket: input.context_size_bucket,
-      user_turn: input.user_turn,
+      question: question?.eligible === true ? question.question : undefined,
       rawHints: input.raw_hints,
     });
     if (!privacy.hasSendEligibility) {

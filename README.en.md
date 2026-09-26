@@ -91,7 +91,7 @@ Jev never becomes the executing model: it only hands the local router a constrai
 - The router builds only exact `(model, reasoning effort)` pairs proved
   requestable through the current authenticated caller edge. Jev makes one
   Choice; local code adds no task-kind table or second semantic router.
-- Jev receives compact state that passes an explicit send check, such as the current step, a bounded tool-error summary, and the current model. The full session still goes through the native Codex model call; raw prompts and tool output are not stored in route logs by default.
+- Jev receives state that passes an explicit send check, such as the current step, a bounded tool-error summary, and the current model. With the user's explicit authorization, the current question may be sent only for a native user turn when the final user message has eligible string or pure `input_text` content, fits the 8 KiB UTF-8 cap, and passes secret checks. History, tools, files, images, mixed content, credentials, and question text in route records remain excluded.
 - Production routing pins a validated Jev version. OFF, privacy refusal,
   insufficient facts, timeout, low confidence, and invalid answers all use the
   same proved fixed baseline with distinct reasons. There is no product-wide
@@ -112,9 +112,9 @@ model-picker visibility is not execution evidence. Current tiers are
 
 ## What data goes where
 
-- **Sent to Jev:** only the compact state that passes an explicit send check — step type, current model, tool name, exit codes, fixed-length error digests. The full session never leaves the host for routing.
+- **Sent to Jev:** only state that passes an explicit send check — step type, current model, tool name, exit codes, fixed-length error digests, and an eligible current question. History, tools, files, images, mixed content, and credentials never leave the host for routing.
 - **Sent upstream:** the native session content, exactly as it would flow without the proxy; the proxy never rewrites the response event stream.
-- **Stored locally:** no raw prompts or tool output in default logs; sensitive content is refused outright rather than truncated, and calls without send eligibility skip Jev for the baseline.
+- **Stored locally:** no question text, raw prompts, or tool output in route records; sensitive, malformed, empty, and oversized content is refused outright rather than truncated, and calls without send eligibility skip Jev for the baseline.
 
 ## A good route does not prove completion
 

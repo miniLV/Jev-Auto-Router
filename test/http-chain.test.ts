@@ -9,6 +9,7 @@ import { MemoryTelemetry } from "../src/proxy.js";
 import { buildCandidateSet, deriveCandidateCatalogId } from "../src/catalog.js";
 import type { ModelCatalog } from "../src/catalog.js";
 import type { JevTransportRequest } from "../src/jev-adapter.js";
+import { MAX_QUESTION_BYTES } from "../src/route-plan.js";
 import { testCatalog } from "./routing-fixtures.js";
 
 /**
@@ -249,6 +250,118 @@ test("full chain: only jev/auto routes; forwarded requests never recurse to the 
     assert.equal(harness.jev.requests.length, 1);
     assert.equal(harness.jev.requests[0].authorization, "Bearer jev-test-key");
     assert.equal(harness.jev.requests[0].state.step_type, "tool_step");
+  } finally {
+    await harness.close();
+  }
+});
+
+test("full chain: Jev receives the current raw question over the approved HTTP seam", async () => {
+  const harness = await startRouter({ JEV_MODE: "active" });
+  const selected = buildCandidateSet(testCatalog()).pairs.find(pair => pair.model === "gpt-6-luna" && pair.effort === "medium");
+  assert.ok(selected);
+  harness.jev.answerWith(() => ({ choice: selected.pair_id, confidence: 0.95 }));
+  const current = "repair the parser and verify the fix [question-marker]";
+  const history = "old history must stay out [history-marker]";
+  const multipart = [
+    { type: "message", role: "user", content: history },
+    { type: "message", role: "user", id: "msg_current", status: "completed", content: [
+      { type: "input_text", text: "repair the parser and " },
+      { type: "input_text", text: "verify the fix [question-marker]" },
+    ] },
+  ];
+  try {
+    const first = await postResponses(harness, {
+      model: "jev/auto",
+      input: current,
+      metadata: { sentinel: "metadata-must-stay-upstream" },
+      tools: [{ type: "function", name: "sentinel-tool" }],
+      instructions: "sentinel instructions must stay upstream",
+      stream: true,
+    }, { "x-jev-step": "user_turn" });
+    assert.equal(first.status, 200);
+    await first.text();
+
+    const second = await postResponses(harness, {
+      model: "jev/auto",
+      input: multipart,
+      stream: true,
+    }, { "x-jev-step": "user_turn" });
+    assert.equal(second.status, 200);
+    await second.text();
+
+    assert.equal(harness.jev.requests.length, 2);
+    assert.equal(harness.jev.requests[0].authorization, "Bearer jev-test-key");
+    assert.equal(harness.jev.requests[0].state.question, current);
+    assert.equal(harness.jev.requests[1].state.question, current);
+    assert.ok(!JSON.stringify(harness.jev.requests[1].state).includes(history));
+    const jevPayload = JSON.stringify(harness.jev.requests);
+    assert.ok(!jevPayload.includes("metadata-must-stay-upstream"));
+    assert.ok(!jevPayload.includes("sentinel-tool"));
+    assert.ok(!jevPayload.includes("sentinel instructions must stay upstream"));
+    assert.deepEqual(harness.edge.requests[0].body.input, current);
+    assert.deepEqual(harness.edge.requests[1].body.input, multipart);
+
+    const calls = await waitForCalls(harness, 2);
+    const serializedCalls = JSON.stringify(calls);
+    assert.ok(!serializedCalls.includes(current));
+    assert.ok(!serializedCalls.includes(history));
+  } finally {
+    await harness.close();
+  }
+});
+
+test("full chain: malformed, sensitive, mixed and oversize user input refuses Jev and preserves native upstream input", async () => {
+  const harness = await startRouter({ JEV_MODE: "active" });
+  const cases: Array<{ input: unknown; marker: string }> = [
+    { input: [], marker: "empty" },
+    { input: [{ type: "message", role: "user", content: "history" }, { type: "function_call_output", call_id: "call_1", output: "tool" }], marker: "tool" },
+    { input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "keep" }, { type: "input_image", image_url: "image" }] }], marker: "mixed" },
+    { input: [{ type: "message", role: "assistant", content: "assistant" }], marker: "unknown" },
+    { input: "Authorization: Bearer opaque-secret", marker: "sensitive" },
+    { input: "q".repeat(MAX_QUESTION_BYTES + 1), marker: "oversize" },
+  ];
+  try {
+    for (const entry of cases) {
+      const response = await postResponses(harness, {
+        model: "jev/auto",
+        input: entry.input,
+        marker: entry.marker,
+      }, { "x-jev-step": "user_turn" });
+      assert.equal(response.status, 200);
+      await response.text();
+    }
+    assert.equal(harness.jev.requests.length, 0);
+    assert.equal(harness.edge.requests.length, cases.length);
+    for (const [index, entry] of cases.entries()) {
+      assert.equal(harness.edge.requests[index].model, "gpt-6-sol");
+      assert.equal(harness.edge.requests[index].effort, "medium");
+      assert.deepEqual(harness.edge.requests[index].body.input, entry.input);
+    }
+    const calls = (await waitForCalls(harness, cases.length)) as Array<Record<string, unknown>>;
+    assert.deepEqual(calls.map(call => call.reason), cases.map(() => "privacy_refusal"));
+    assert.ok(!JSON.stringify(calls).includes("opaque-secret"));
+  } finally {
+    await harness.close();
+  }
+});
+
+test("full chain: tool steps carry no user question even when native input contains one", async () => {
+  const harness = await startRouter({ JEV_MODE: "active" });
+  const selected = buildCandidateSet(testCatalog()).pairs.find(pair => pair.model === "gpt-6-luna" && pair.effort === "medium");
+  assert.ok(selected);
+  harness.jev.answerWith(() => ({ choice: selected.pair_id, confidence: 0.95 }));
+  try {
+    const response = await postResponses(harness, {
+      model: "jev/auto",
+      input: [{ type: "message", role: "user", content: "must not become a tool-step question" }],
+    }, {
+      "x-jev-step": "tool_step",
+      "x-jev-current-model": "gpt-6-sol",
+    });
+    assert.equal(response.status, 200);
+    await response.text();
+    assert.equal(harness.jev.requests.length, 1);
+    assert.equal("question" in harness.jev.requests[0].state, false);
   } finally {
     await harness.close();
   }
@@ -658,7 +771,11 @@ test("full chain: caller-controlled verification IDs and secrets never reach Jev
     const verificationResult = await verification.json() as { task: { failure_facts?: { failing_item_ids: string[] } } };
     assert.deepEqual(verificationResult.task.failure_facts, { failing_item_ids: [acceptanceId] });
 
-    const response = await postResponses(harness, { model: "jev/auto", input: [], stream: true }, {
+    const response = await postResponses(harness, {
+      model: "jev/auto",
+      input: [{ type: "message", role: "user", content: "continue the correction" }],
+      stream: true,
+    }, {
       "x-jev-step": "user_turn",
       "x-jev-task-id": taskId,
       "x-jev-current-model": "gpt-6-sol",
@@ -667,7 +784,11 @@ test("full chain: caller-controlled verification IDs and secrets never reach Jev
     await response.text();
 
     assert.equal(harness.jev.requests.length, 1);
-    assert.deepEqual(harness.jev.requests[0].state, { step_type: "correction", current_model: "gpt-6-sol" });
+    assert.deepEqual(harness.jev.requests[0].state, {
+      step_type: "correction",
+      current_model: "gpt-6-sol",
+      question: "continue the correction",
+    });
     const sentPayload = JSON.stringify(harness.jev.requests);
     assert.ok(!sentPayload.includes(acceptanceId));
     assert.ok(!sentPayload.includes(detailSecret));
@@ -1313,7 +1434,7 @@ test("full chain: health reports the entry model, mode and baseline catalog matc
     const payload = (await response.json()) as Record<string, unknown>;
     assert.equal(payload.autoModel, "jev/auto");
     assert.equal(payload.mode, "shadow");
-    assert.equal(payload.policyVersion, "per-call/1");
+    assert.equal(payload.policyVersion, "per-call/2");
     assert.equal(payload.callerEdgeId, "edge-test-v1");
     assert.equal(payload.candidateCatalogId, candidateCatalogId);
     assert.deepEqual(payload.baseline, { model: "gpt-6-sol", effort: "medium" });

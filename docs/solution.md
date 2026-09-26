@@ -102,10 +102,14 @@ cost, so it is forbidden.
 
 ## Privacy and authentication
 
-Jev receives only approved structured routing facts and Candidate Pair
-descriptions. It does not receive the native input, raw user instructions,
-files, tool output, conversation text or credentials. A bounded string is not
-automatically safe; the send policy must allow the field.
+Jev receives approved structured routing facts and Candidate Pair descriptions.
+For a native user turn, the send policy also allows the current question when
+it is a non-empty top-level string or the final user message's string/pure
+`input_text` content, fits the 8 KiB UTF-8 cap and passes the secret checks.
+Earlier history and tool/file/image/mixed content remain ineligible. A
+separately supplied `user_turn` field cannot inject text; the proxy derives the
+question from the native request and keeps the original request for the
+caller edge.
 
 The caller edge alone holds upstream authentication. The local router can apply
 a real model pair but cannot copy, log or expose the caller's credentials.

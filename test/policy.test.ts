@@ -73,7 +73,7 @@ function decisionOf(partial: Partial<JevDecision>): JevDecision {
     candidate_set_digest: "set",
     jev_requested_version: "jev-1.13.0",
     jev_resolved_version: "jev-1.13.0",
-    question_schema_version: "choice-pairs/2",
+    question_schema_version: "choice-pairs/3",
     valid: true,
     chosen_pair_id: pairIdOf("gpt-6-luna", "medium"),
     confidence: 0.9,

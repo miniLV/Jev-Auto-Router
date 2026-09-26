@@ -97,6 +97,39 @@ test("Active offers Jev only exact approved model/effort pairs", async () => {
   assert.equal(upstream.requests[0].reasoning?.effort, allowed.effort);
 });
 
+test("native input is the only user-question source; a separately supplied user_turn is ignored", async () => {
+  const nativeQuestion = "native question marker";
+  const spoofedQuestion = "spoofed question must not leave the caller";
+  const jev = new RecordingTransport(choosingTransport(pairIdOf("gpt-6-sol", "medium")));
+  const { proxy: p, upstream } = proxy({ mode: "active", jev: jev.transport });
+  await p.routeCall({
+    task_id: "t",
+    step_type: "user_turn",
+    request: { ...sampleRequest(), input: [{ type: "message", role: "user", content: nativeQuestion }] },
+    user_turn: { request_text: spoofedQuestion },
+  });
+  assert.equal(jev.requests.length, 1);
+  assert.equal(jev.requests[0].state.question, nativeQuestion);
+  assert.ok(!JSON.stringify(jev.requests[0]).includes(spoofedQuestion));
+  assert.deepEqual(upstream.requests[0].input, [{ type: "message", role: "user", content: nativeQuestion }]);
+});
+
+test("an explicit user correction sends its current question but a tool result does not", async () => {
+  const jev = new RecordingTransport(choosingTransport(pairIdOf("gpt-6-sol", "medium")));
+  const { proxy: p, upstream } = proxy({ mode: "active", jev: jev.transport });
+  const correction = { ...sampleRequest(), input: [{ type: "message", role: "user", content: "The parser still fails on empty input" }] };
+  await p.routeCall({ task_id: "correction", step_type: "correction", request: correction });
+  assert.equal(jev.requests.length, 1);
+  assert.equal(jev.requests[0].state.step_type, "correction");
+  assert.equal(jev.requests[0].state.question, "The parser still fails on empty input");
+
+  const tool = { ...sampleRequest(), input: [{ type: "function_call_output", call_id: "call_1", output: "private tool result" }] };
+  const result = await p.routeCall({ task_id: "correction", step_type: "correction", request: tool });
+  assert.equal(result.record.reason, "privacy_refusal");
+  assert.equal(jev.requests.length, 1);
+  assert.deepEqual(upstream.requests[1].input, tool.input);
+});
+
 test("an effort listed by discovery but absent from proof cannot reach Apply", async () => {
   const catalog = testCatalog([{
     model: "gpt-6-sol",
@@ -489,7 +522,7 @@ test("FAIL marks the next session call as correction and retains local failure f
   assert.deepEqual(p.taskState("t").failure_facts, { failing_item_ids: ["a1"] });
 });
 
-test("a correction without other routing facts falls back and preserves privacy refusal", async () => {
+test("a correction with malformed native input falls back and preserves privacy refusal", async () => {
   const jev = new RecordingTransport(choosingTransport("x"));
   const { proxy: p, upstream } = proxy({ jev: jev.transport });
   p.verifyTask("t", {
@@ -497,8 +530,12 @@ test("a correction without other routing facts falls back and preserves privacy 
     evidence: [{ acceptance_id: "untrusted-acceptance-id", kind: "test", status: "fail", detail_ref: "local-ref" }],
   });
 
-  const insufficient = await p.routeCall({ task_id: "t", step_type: "user_turn", request: sampleRequest() });
-  assert.equal(insufficient.record.reason, "insufficient_routing_facts");
+  const insufficient = await p.routeCall({
+    task_id: "t",
+    step_type: "user_turn",
+    request: { ...sampleRequest(), input: [] },
+  });
+  assert.equal(insufficient.record.reason, "privacy_refusal");
   assert.equal(jev.requests.length, 0);
   assert.equal(upstream.requests.length, 1);
 

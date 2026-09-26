@@ -33,8 +33,8 @@ const config: HarnessConfig = {
   candidateCatalogId,
   jevVersion: "jev-1.13.0",
   runtimePolicy: { confidenceFloor: 0.55, deadlineMs: 2_000 },
-  policyVersion: "per-call/1",
-  questionSchemaVersion: "route-v1",
+  policyVersion: "per-call/2",
+  questionSchemaVersion: "choice-pairs/3",
   cacheConditions: "declared-per-task",
   prices: {
     "gpt-6-sol": { input: 1.25, cached_input: 0.25, cache_write_input: 2, output: 5 },

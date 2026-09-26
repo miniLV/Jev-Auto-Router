@@ -369,8 +369,8 @@
           <ul>
             <li><strong>可用组合：</strong>来自认证通道实际可请求的模型与 effort；每个候选是完整的 <code>(model, effort)</code> 对。</li>
             <li><strong>硬约束：</strong>用户手动固定模型直接执行；基础设施调用使用固定组合；不符合能力与可用性要求的组合先排除。</li>
-            <li><strong>送给 Jev：</strong>调用类型、当前模型、上下文区间、工具名称与状态、错误类别等白名单事实。任务摘要只有明确允许发送时才可加入。</li>
-            <li><strong>不送 Jev：</strong>原始用户文本、工具输出、完整会话、代码文件内容与认证信息。</li>
+            <li><strong>送给 Jev：</strong>调用类型、当前模型、上下文区间、工具名称与状态、错误类别等白名单事实；用户明确授权的当前问题仅在最后 user-turn 项符合解析、8 KiB UTF-8 上限和敏感检查时加入。</li>
+            <li><strong>不送 Jev：</strong>历史、工具、文件、图片、混合内容、完整会话、代码文件内容与认证信息。</li>
           </ul>
         </div>
         <div class="board">
@@ -409,7 +409,7 @@
       <p class="section-sub">这些决定影响能否从历史用户报告的可行性摘要走向可重跑、稳定的自动路由。</p>
       <div class="review-grid">
         <article class="sketch-card blue"><div class="tiny-label">R1 · TRANSPORT</div><h3>认证 caller edge 的契约</h3><p>确认验证通过的是哪个版本和入口；明确认证归属、请求头转发、取消传播与 caller edge 升级时的兼容测试。该入口必须绕开 <code>jev/auto</code> 再路由。</p></article>
-        <article class="sketch-card pink"><div class="tiny-label">R2 · ROUTING SIGNAL</div><h3>隐私与决策信息量</h3><p>在不发送原文的前提下，确定哪些结构化事实足以让 Jev 区分简单跟进和困难推理。若事实不足，该次调用使用可靠组合，并在 shadow 数据中量化比例。</p></article>
+        <article class="sketch-card pink"><div class="tiny-label">R2 · ROUTING SIGNAL</div><h3>隐私与决策信息量</h3><p>当前问题只有在用户明确授权、原生 user-turn 最后一项合格且通过 8 KiB 与敏感检查时发送；历史、工具、文件和凭据保持拒绝。若事实不足，该次调用使用可靠组合，并在 shadow 数据中量化比例。</p></article>
         <article class="sketch-card green"><div class="tiny-label">R3 · QUALITY + COST</div><h3>激活标准</h3><p>先在 shadow 模式记录延迟、提议组合和故障；再用相同任务与验收标准做配对执行，计入 Jev、缓存损失与返工。只有质量达标才讨论总成本收益。</p></article>
       </div>
     </section>

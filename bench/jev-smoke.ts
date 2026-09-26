@@ -24,8 +24,8 @@ const catalog: ModelCatalog = {
 };
 const candidates = buildCandidateSet(catalog, { astraAdmitted: true });
 const cases: Array<{ id: string; state: RoutingState }> = [
-  { id: "short_request", state: { step_type: "user_turn", current_model: "gpt-6-sol", user_turn_facts: { request_length_bucket: "short" } } },
-  { id: "long_request", state: { step_type: "user_turn", current_model: "gpt-6-sol", user_turn_facts: { request_length_bucket: "long" } } },
+  { id: "short_request", state: { step_type: "user_turn", current_model: "gpt-6-sol", question: "Review this change." } },
+  { id: "complex_request", state: { step_type: "user_turn", current_model: "gpt-6-sol", question: "Trace the failure, update the implementation, and verify the resulting behavior." } },
   { id: "tool_followup", state: { step_type: "tool_step", current_model: "gpt-6-sol" } },
   { id: "correction", state: { step_type: "correction", current_model: "gpt-6-sol" } },
   { id: "large_context", state: { step_type: "tool_step", current_model: "gpt-6-luna", context_size_bucket: "large" } },

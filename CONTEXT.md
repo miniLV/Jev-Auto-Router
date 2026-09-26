@@ -58,7 +58,7 @@ Codex。用户选择真实模型时走正常通道，不进入 Jev Router。OFF�
 | Proposed Pair | The pair returned by Jev, if any. It is not evidence of what was requested upstream or executed. |
 | Applied Pair | The pair placed in the authenticated upstream request after mode and Guard handling. |
 | Observed Pair | The pair authoritatively reported by the upstream response, or `UNKNOWN` when unavailable. |
-| Privacy Boundary | The minimal field whitelist and send policy for routing state. Prefer tool name, exit status, error codes, and fixed-length error digests; treat text as untrusted; refuse to send sensitive content. No send eligibility means Jev is skipped for that call. Logs persist no raw text by default. |
+| Privacy Boundary | The minimal field whitelist and send policy for routing state. The only raw text exception is the current native user question when it is the final eligible user message, within 8 KiB UTF-8 and free of detected secrets; history, tools, files, images, mixed content and credentials remain forbidden. Treat text as untrusted; refuse sensitive or malformed input. No send eligibility means Jev is skipped for that call. Logs persist no question text. |
 | Hot-Path Deadline | The short Jev deadline derived from Shadow Mode latency data. Expiry uses the fixed Fallback Baseline and records `jev_timeout`. |
 | Task Boundary | The end of a Main Task, where independent verification runs. It is outside the economic routing loop. |
 | Independent Verification | The task-level check of original acceptance conditions against the delivered diff, tests, artifacts and run results. Model self-report and Jev confidence are never completion evidence. |

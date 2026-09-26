@@ -56,21 +56,30 @@ rejection. Each condition retains a distinct recorded reason.
 
 ## 4. Routing State and privacy
 
-Only allowlisted, structured facts may be sent to Jev:
+Only the following allowlisted fields may be sent to Jev:
 
 - step type and mode;
 - current real model when known;
 - context-size bucket when observable;
+- for an eligible `user_turn` (including a user-originated correction), the
+  current question extracted from the native `input`: a non-empty top-level
+  string, or the final `type: "message"`, `role: "user"` item containing a
+  non-empty string or only `input_text` text parts. The question is limited to
+  8 KiB UTF-8, checked with the existing secret patterns, and sent exactly as
+  received when eligible;
 - tool name, exit status, error class or code, and a fixed-length digest for a
   tool follow-up;
 - bounded verification failure facts explicitly approved for routing; and
 - Candidate Pair IDs plus approved capability and relative-cost metadata.
 
-Raw user instructions, file contents, tool output, full conversation text,
-secrets, authentication material and unapproved identifiers are forbidden.
-Text truncation is not authorization. If the remaining facts are insufficient
-to make the defined Choice, do not call Jev; use the Fallback Baseline with
-`insufficient_routing_facts`.
+Only that current extracted question may be raw. Earlier history items,
+tool/file/image/unknown or mixed content, malformed or empty input, oversized
+input and sensitive input are refused; the request still goes to the caller
+edge unchanged and Jev is skipped with `privacy_refusal`. Raw file contents,
+tool output, full conversation text, secrets, authentication material and
+unapproved identifiers remain forbidden. Text truncation is not authorization.
+If the remaining facts are insufficient to make the defined Choice, do not
+call Jev; use the Fallback Baseline with `insufficient_routing_facts`.
 
 ## 5. Candidate Pairs and one Jev Choice
 

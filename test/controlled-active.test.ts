@@ -603,7 +603,7 @@ test("controlled startup serves the exact frozen Active pair on loopback and sav
     const unplannedTask = await fetch(`http://127.0.0.1:${address.port}/v1/responses`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-jev-step": "user_turn", "x-jev-task-id": "not-in-frozen-plan" },
-      body: JSON.stringify({ model: "jev/auto", input: [{ role: "user", content: "must not be routed" }] }),
+      body: JSON.stringify({ model: "jev/auto", input: [{ type: "message", role: "user", content: "must not be routed" }] }),
     });
     assert.equal(unplannedTask.status, 403);
     assert.equal(setup.calls.length, 0);
@@ -618,7 +618,7 @@ test("controlled startup serves the exact frozen Active pair on loopback and sav
         "x-jev-evaluation-only": "false",
         "x-jev-active-candidates": `${baseline.model}/${baseline.effort}`,
       },
-      body: JSON.stringify({ model: "jev/auto", input: [{ role: "user", content: "synthetic private prompt text" }] }),
+      body: JSON.stringify({ model: "jev/auto", input: [{ type: "message", role: "user", content: "synthetic private prompt text" }] }),
     });
     assert.equal(response.status, 200);
     const payload = await response.json() as { model?: string; reasoning?: { effort?: string } };
