@@ -56,4 +56,5 @@ Related: 原 Issue 07 第 1 项；`bench/paired-evaluation.ts` 的 `EvaluationPl
 
 ## Comments
 
+- 2026-09-26 未完成进度：新增 `evidence/paired-task-corpus-draft.md`，从四个历史真实修复票选出修复前仓库快照，复现每个无 Git 历史的 archive SHA-256，并写明双 arm 重置、同一验收、独立盲审和完整成本草案。该文件明确标为 DRAFT；精确模型/edge、价格、评审主体、顺序和不可变冻结计划尚缺，未运行配对 arm，也未生成 PASS。
 - 2026-09-24 未完成进度：评估器现在拒绝 `UNKNOWN` 的 release/币种/价格来源、缺任一冻结门槛，以及空白或 `UNKNOWN` 的任务和独立评审字段。Root 复核后运行 `npm test`（228/228）、`npm run typecheck` 和 `git diff --check`，均通过。现有空、重复、缺失、晚冻结、错顺序及 `UNKNOWN` 用量/成本拒绝行为已核对；没有增加空模板，因为本票清单和 `bench/README.md` 已覆盖结构。真实任务、快照、独立评审、当前 pair/版本及权威价格仍未提供，没有冻结正式计划或运行任何 arm；本票继续未完成。
