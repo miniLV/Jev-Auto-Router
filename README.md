@@ -24,7 +24,9 @@
     <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
   </a>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
-  <img alt="npm not published" src="https://img.shields.io/badge/npm-not%20published-lightgrey" />
+  <a href="https://www.npmjs.com/package/jev-auto-router">
+    <img alt="npm" src="https://img.shields.io/npm/v/jev-auto-router" />
+  </a>
 </p>
 
 <p align="center">
@@ -43,7 +45,7 @@
 - 价格 break-even、缓存热度、session 稳定和升级触发都由本地 policy 决定；
 - 支持 **Codex CLI** 和 **Codex app**。
 
-> **当前状态：** `v0.1.0` alpha；63 个确定性测试通过；真实 GPT cache/质量评测还在补。effort routing 默认关闭。
+> **当前状态：** `v0.1.0` alpha；64 个确定性测试通过；真实 GPT cache/质量评测还在补。effort routing 默认关闭。
 
 ## 能做什么
 
@@ -54,7 +56,7 @@
 | Cache-aware gates | 价格 break-even、cache 热度、大上下文和 session 稳定保护 |
 | Codex CLI | `jev-codex` 启动真实 Codex，并注入 `Jev Auto Router` |
 | Codex app | `jev-codex setup-app` 配置本地 provider 和 model catalog |
-| Evidence | 63 个确定性测试；真实收益评测计划已落地 |
+| Evidence | 64 个确定性测试；真实收益评测计划已落地 |
 
 - 设计文档：[docs/codex-turn-router.md](docs/codex-turn-router.md)
 - 评测计划：[docs/evaluation-plan.md](docs/evaluation-plan.md)
@@ -63,10 +65,20 @@
 
 ## 安装
 
-> [!IMPORTANT]
-> npm registry 版本还没有发布（`npm view jev-auto-router` 是 404）。当前请从源码安装；npm 发布后再使用下面的 npm 命令。
+### npm
 
-### 从源码（当前可用）
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+或者不全局安装：
+
+```sh
+npx -y jev-auto-router
+```
+
+### 从源码
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -75,19 +87,6 @@ npm ci
 npm run build
 npm link
 jev-codex
-```
-
-### npm（发布后可用）
-
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-或者：
-
-```sh
-npx -y jev-auto-router
 ```
 
 ### Codex app

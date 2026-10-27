@@ -24,7 +24,9 @@
     <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
   </a>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
-  <img alt="npm not published" src="https://img.shields.io/badge/npm-not%20published-lightgrey" />
+  <a href="https://www.npmjs.com/package/jev-auto-router">
+    <img alt="npm" src="https://img.shields.io/npm/v/jev-auto-router" />
+  </a>
 </p>
 
 <p align="center">
@@ -43,7 +45,7 @@ If you use Codex and often spend `frontier + high effort` on routine turns:
 - price break-even, cache warmth, session guards and upgrade triggers are deterministic policy;
 - supports **Codex CLI** and the **Codex app**.
 
-> **Status:** `v0.1.0` alpha; 63 deterministic tests pass; live GPT cache/quality evaluation is still pending. Effort routing is off by default.
+> **Status:** `v0.1.0` alpha; 64 deterministic tests pass; live GPT cache/quality evaluation is still pending. Effort routing is off by default.
 
 ## What it does
 
@@ -54,7 +56,7 @@ If you use Codex and often spend `frontier + high effort` on routine turns:
 | Cache-aware gates | Price break-even, cache warmth, large-context and session guards |
 | Codex CLI | `jev-codex` launches real Codex with the `Jev Auto Router` entry |
 | Codex app | `jev-codex setup-app` configures the local provider and model catalog |
-| Evidence | 63 deterministic tests; a live savings evaluation plan is in the repo |
+| Evidence | 64 deterministic tests; a live savings evaluation plan is in the repo |
 
 - Design notes: [docs/codex-turn-router.md](docs/codex-turn-router.md)
 - Evaluation plan: [docs/evaluation-plan.md](docs/evaluation-plan.md)
@@ -63,10 +65,20 @@ If you use Codex and often spend `frontier + high effort` on routine turns:
 
 ## Install
 
-> [!IMPORTANT]
-> The npm registry release does not exist yet (`npm view jev-auto-router` returns 404). Use the source install now; the npm commands below become available after the first publish.
+### npm
 
-### From source (available now)
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+Or run without a global install:
+
+```sh
+npx -y jev-auto-router
+```
+
+### From source
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -75,19 +87,6 @@ npm ci
 npm run build
 npm link
 jev-codex
-```
-
-### npm (after release)
-
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-Or:
-
-```sh
-npx -y jev-auto-router
 ```
 
 ### Codex app
@@ -308,7 +307,7 @@ src/codex-router/
 
 - Version: `0.1.0`
 - Git tag: `v0.1.0`
-- npm registry: **not published**
+- npm package: `jev-auto-router`
 - Release process: [docs/releasing.md](docs/releasing.md)
 - CI: `.github/workflows/ci.yml`
 - Release workflow: `.github/workflows/release.yml` (tag `v*` or manual)
