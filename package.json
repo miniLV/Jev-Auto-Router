@@ -1,6 +1,6 @@
 {
   "name": "jev-auto-router",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=22"
@@ -16,11 +16,18 @@
     "dashboard": "node dist/src/index.js",
     "install-brief": "node dist/src/install-brief.js",
     "release": "node scripts/release.mjs",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/codex-router/server.js",
+    "codex": "npm run build && node bin/jev-codex.mjs",
+    "codex:proxy": "npm run build && node dist/src/codex-router/server.js",
+    "legacy:start": "node dist/src/index.js",
+    "legacy:install-brief": "node dist/src/install-brief.js"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
     "typescript": "^5.8.3"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "bin": {
+    "jev-codex": "bin/jev-codex.mjs"
+  }
 }

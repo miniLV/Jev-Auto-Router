@@ -2,11 +2,11 @@
 
 ## 项目结构与模块组织
 
-`src/` 存放 TypeScript 路由器、代理、策略检查和仪表板入口（`src/index.ts`）。相关测试放在 `test/`，文件名采用 `*.test.ts`；共享测试数据位于 `test/routing-fixtures.ts`。`bench/` 存放基准测试夹具和运行程序。设计说明与决策记录分别位于 `docs/sdd/` 和 `docs/adr/`；面向用户的图片位于 `assets/` 和 `docs/assets/`。`skills/jev-auto-router/` 包含可分发的技能文件。`dist/` 是生成目录，不要直接编辑或提交其中内容。
+主路径位于 `src/codex-router/`：`config` 负责 tier 与环境配置，`turn` 识别 fresh user turn，`policy` 做确定性决策，`jev` 调用 Jev，`proxy` 转发并固定模型，`cli` 启动真实 Codex。入口是 `bin/jev-codex.mjs`。旧的逐调用路径仍位于 `src/`，只作为 legacy 参考，不再由 `npm start` 或 `jev-codex` 调用。相关测试放在 `test/`，文件名采用 `*.test.ts`。设计说明与决策记录分别位于 `docs/sdd/` 和 `docs/adr/`；新架构见 `docs/codex-turn-router.md` 和 ADR 0018。`dist/` 是生成目录，不要直接编辑或提交其中内容。
 
 ## 构建、测试与开发命令
 
-请使用 Node.js 22 或更高版本。运行 `npm ci` 安装锁定版本的依赖。`npm run typecheck` 检查 TypeScript，不生成文件。`npm run build` 会清理并重新生成 `dist/`。`npm test` 会先构建，再通过 Node 测试运行器执行全部 `test/*.test.ts` 测试。构建后运行 `npm start` 可启动本地代理和仪表板，地址为 `http://127.0.0.1:8787`。运行时配置要求请参阅 `README.md`。
+请使用 Node.js 22 或更高版本。运行 `npm ci` 安装锁定版本的依赖。`npm run typecheck` 检查 TypeScript，不生成文件。`npm run build` 会清理并重新生成 `dist/`。`npm test` 会先构建，再通过 Node 测试运行器执行全部 `test/*.test.ts` 测试。构建后运行 `npm start` 启动独立的 turn-pinned 代理；用户入口是 `node bin/jev-codex.mjs` 或 `npm run codex`。运行时配置要求请参阅 [docs/codex-turn-router.md](docs/codex-turn-router.md)。
 
 ## 编码风格与命名约定
 
