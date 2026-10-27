@@ -16,6 +16,14 @@ test("rejects malformed or incomplete prices", () => {
   assert.equal(parsePriceTable(JSON.stringify({ "gpt-6-sol": { input: 1 } })), undefined);
 });
 
+test("keeps the latest GPT-6 tier defaults", () => {
+  const config = loadConfig({});
+  assert.equal(config.tiers.fast, "gpt-6-luna");
+  assert.equal(config.tiers.balanced, "gpt-6-sol");
+  assert.equal(config.tiers.strong, "gpt-6.1-sol");
+  assert.equal(config.tiers.long, "gpt-6-astra");
+});
+
 test("loads optimization knobs from the environment", () => {
   const config = loadConfig({
     JEV_CODEX_TASK_TURN_BUDGET: "10",

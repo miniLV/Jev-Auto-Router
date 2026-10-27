@@ -104,9 +104,10 @@ Then fully quit and reopen the ChatGPT/Codex app, create a new task, and select 
 
 ```text
 Jev Auto Router
+GPT-6.1-Sol
+GPT-6-Astra
+GPT-6-Sol
 GPT-6-Luna
-GPT-5.6-Terra
-GPT-5.6-Luna
 ...
 ```
 
@@ -116,7 +117,7 @@ Notes:
 
 - `JEV_API_KEY` / `TYPESAFE_API_KEY` is required. Without a key, `jev-codex` launches Codex without routing, and `jev-auto` will not appear.
 - The Codex app uses the same local provider; configure it with `jev-codex setup-app`.
-- The actual list depends on your account catalog; the model names above are illustrative.
+- The actual list depends on your account catalog; the example shows the latest GPT-6 lineup, and older accounts may see only a subset.
 
 ### Codex app
 

@@ -104,9 +104,10 @@ jev-codex setup-app
 
 ```text
 Jev Auto Router
+GPT-6.1-Sol
+GPT-6-Astra
+GPT-6-Sol
 GPT-6-Luna
-GPT-5.6-Terra
-GPT-5.6-Luna
 ...
 ```
 
@@ -116,7 +117,7 @@ GPT-5.6-Luna
 
 - 需要 `JEV_API_KEY` / `TYPESAFE_API_KEY`。没有 key 时 `jev-codex` 会启动 Codex 但不启用路由，model list 里不会出现 `jev-auto`。
 - Codex app 通过同一套本地 provider 接入；用 `jev-codex setup-app` 配置。
-- 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
+- 实际列表取决于你的账号目录；上例展示最新的 GPT-6 阵容，旧账号可能只看到其中一部分。
 
 ### Codex app
 
