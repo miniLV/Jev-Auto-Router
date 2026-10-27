@@ -12,6 +12,14 @@ import {
   tierForModel,
 } from "./config.js";
 import { effectiveTurnLock, evaluateDowngrade, remainingTurns } from "./cache.js";
+import {
+  addOrReplaceUpdate,
+  applyEffortUpdates,
+  chooseEffort,
+  dedupeAdjacentUpdates,
+  effectiveEffort,
+  validateUpdates,
+} from "./effort.js";
 import { askJev } from "./jev.js";
 import { createDecisionLog, type DecisionLog } from "./log.js";
 import { decide, detectOverride, shouldUseExactModel } from "./policy.js";
@@ -27,7 +35,7 @@ import {
 } from "./turn.js";
 import { attachUsageObserver, UsageScanner } from "./usage.js";
 import { NoopSessionStore, type SessionStore } from "./session-store.js";
-import type { JevResult, ModelCandidate, RouteInput, RouterConfig, SessionState, Tier } from "./types.js";
+import type { EffortUpdate, JevResult, ModelCandidate, RouteInput, RouterConfig, SessionState, Tier } from "./types.js";
 import { AUTO_MODEL } from "./types.js";
 
 export type RouteFn = (input: RouteInput) => Promise<JevResult>;
@@ -69,6 +77,7 @@ interface RoutingSummary {
   confidence: number | null;
   reason: string;
   changed: boolean;
+  effort?: string;
 }
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
@@ -166,9 +175,10 @@ function isSse(headers: IncomingHttpHeaders, first: string): boolean {
 }
 
 function decisionEvents(summary: RoutingSummary): string {
+  const effort = summary.effort ? `, effort ${summary.effort}` : "";
   const text = summary.changed
-    ? `[Jev] routed this turn to ${summary.model} (${summary.reason}${summary.confidence === null ? "" : `, confidence ${summary.confidence.toFixed(2)}`}).`
-    : `[Jev] kept ${summary.model} for this turn (${summary.reason}).`;
+    ? `[Jev] routed this turn to ${summary.model} (${summary.reason}${summary.confidence === null ? "" : `, confidence ${summary.confidence.toFixed(2)}`}${effort}).`
+    : `[Jev] kept ${summary.model} for this turn (${summary.reason}${effort}).`;
   const id = `jev-${randomUUID()}`;
   const item = {
     type: "message",
@@ -216,8 +226,20 @@ function streamWithCommentary(
   upstream.on("error", () => res.destroy());
 }
 
-function withCatalogModel(body: ResponsesBody, model: string, candidate: ModelCandidate | undefined): void {
+function reasoningEffort(body: ResponsesBody): string | undefined {
+  return isRecord(body.reasoning) && typeof body.reasoning.effort === "string"
+    ? body.reasoning.effort
+    : undefined;
+}
+
+function withCatalogModel(
+  body: ResponsesBody,
+  model: string,
+  candidate: ModelCandidate | undefined,
+  preserveEffort = false,
+): void {
   body.model = model;
+  if (preserveEffort) return;
   if (!candidate || candidate.supportedEfforts.length === 0) return;
   const reasoning = isRecord(body.reasoning) ? { ...body.reasoning } : undefined;
   const effort = reasoning?.effort;
@@ -364,8 +386,29 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
       const currentModel = state?.model ?? config.defaultModel;
       const currentTier = tierForModel(currentModel, config.tiers) ?? state?.tier ?? "strong";
       const prompt = freshTurnPrompt(parsed);
+      const nativeEffort = reasoningEffort(parsed);
       let model = currentModel;
       let tier = currentTier;
+      let effortBaseline = state?.effortBaseline ?? nativeEffort;
+      let effortModel = state?.effortModel ?? currentModel;
+      let effortUpdates = state?.effortUpdates ?? [];
+
+      if (config.effortRouting === "off") {
+        effortBaseline = nativeEffort;
+        effortUpdates = [];
+        effortModel = currentModel;
+      } else if (!validateUpdates(parsed.input, effortUpdates)) {
+        // Compaction/truncation or a repaired history invalidated the anchors.
+        effortBaseline = nativeEffort;
+        effortUpdates = [];
+        effortModel = currentModel;
+        if (state) {
+          state.effortBaseline = effortBaseline;
+          state.effortModel = effortModel;
+          state.effortUpdates = effortUpdates;
+          persist();
+        }
+      }
 
       if (state && hasCompaction(parsed.input)) {
         // A compaction replaces the prefix; the old cache evidence is no longer
@@ -373,6 +416,12 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
         state.cache = { inputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 0, at: now, warm: false };
         state.turnsSinceSwitch = config.switchCooldownTurns;
         state.lastPromptHash = undefined;
+        effortBaseline = nativeEffort;
+        effortUpdates = [];
+        effortModel = currentModel;
+        state.effortBaseline = effortBaseline;
+        state.effortModel = effortModel;
+        state.effortUpdates = effortUpdates;
         persist();
       }
 
@@ -412,6 +461,9 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             lastContextTokens: contextTokens,
             cache: state?.cache,
             lastFailureAt: state?.lastFailureAt,
+            effortBaseline,
+            effortModel,
+            effortUpdates,
           });
           log.write({
             at: new Date(now).toISOString(),
@@ -432,6 +484,8 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             session_switches: switches,
             turns_since_switch: turnsSinceSwitch + 1,
             cache_warm: cacheWarm ?? null,
+            effort: effectiveEffort(effortBaseline, effortUpdates),
+            effort_update: effortUpdates.length > 0,
           });
           if (config.debug) {
             process.stderr.write(
@@ -489,6 +543,30 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
           switchedModel = model !== currentModel;
           const nextSwitches = switches + (switchedModel ? 1 : 0);
           const nextTurnsSinceSwitch = switchedModel ? 0 : turnsSinceSwitch + 1;
+          const finalCandidate = candidateForModel(available, model);
+          if (effortModel !== model || switchedModel) {
+            effortBaseline = nativeEffort;
+            effortUpdates = [];
+            effortModel = model;
+          }
+          if (
+            config.effortRouting === "turn" &&
+            finalCandidate?.supportsEffortUpdates &&
+            finalCandidate.supportedEfforts.length > 0
+          ) {
+            const choice = chooseEffort(scores, config.effortFallback, config.effortCap, finalCandidate.supportedEfforts);
+            if (choice) {
+              const currentEffort = effectiveEffort(effortBaseline, effortUpdates);
+              if (choice.effort !== currentEffort) {
+                effortUpdates = addOrReplaceUpdate(parsed.input, effortUpdates, choice.effort);
+              }
+              effortModel = model;
+            }
+          } else if (!finalCandidate?.supportsEffortUpdates) {
+            effortBaseline = nativeEffort;
+            effortUpdates = [];
+            effortModel = model;
+          }
           remember(key, {
             tier,
             model,
@@ -500,6 +578,9 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             lastContextTokens: contextTokens,
             cache: state?.cache,
             lastFailureAt: state?.lastFailureAt,
+            effortBaseline,
+            effortModel,
+            effortUpdates,
           });
           summary = {
             tier,
@@ -507,6 +588,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             confidence: result.answer?.confidence ?? null,
             reason: decision.reason,
             changed: decision.changed || switchedModel,
+            effort: effectiveEffort(effortBaseline, effortUpdates),
           };
           log.write({
             at: new Date(now).toISOString(),
@@ -532,6 +614,8 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             downgrade_reason: downgrade?.reason,
             break_even_turns: downgrade?.breakEvenTurns ?? null,
             upgrade_allowed: allowUpgrade,
+            effort: effectiveEffort(effortBaseline, effortUpdates),
+            effort_update: effortUpdates.length > 0,
           });
           if (config.debug) {
             process.stderr.write(
@@ -541,7 +625,14 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
         }
       }
 
-      withCatalogModel(parsed, model, candidateForModel(available, model));
+      const finalCandidate = candidateForModel(available, model);
+      const effortCapable = config.effortRouting === "turn" &&
+        Boolean(finalCandidate?.supportsEffortUpdates) &&
+        Boolean(finalCandidate && finalCandidate.supportedEfforts.length > 0);
+      withCatalogModel(parsed, model, finalCandidate, effortCapable);
+      if (effortCapable && effortUpdates.length > 0) {
+        parsed.input = dedupeAdjacentUpdates(applyEffortUpdates(parsed.input, effortUpdates));
+      }
       if (config.stripEncryptedReasoning) stripForeignReasoning(parsed);
       const upstream = await requestUpstream(req, Buffer.from(JSON.stringify(parsed)), config);
       const status = upstream.statusCode ?? 500;

@@ -27,6 +27,8 @@ export interface DecisionRecord {
   downgrade_reason?: string;
   break_even_turns?: number | null;
   upgrade_allowed?: boolean;
+  effort?: string;
+  effort_update?: boolean;
 }
 
 export interface DecisionLog {

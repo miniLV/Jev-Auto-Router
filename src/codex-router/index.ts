@@ -40,6 +40,16 @@ export type { ProxyOptions, RouteFn, RunningProxy } from "./proxy.js";
 export { buildCodexArgs, hasExplicitModel, loadEnvFiles, resolveCodex, runCodex } from "./cli.js";
 export { JsonlDecisionLog, NoopDecisionLog } from "./log.js";
 export { effectiveTurnLock, evaluateDowngrade, remainingTurns } from "./cache.js";
+export {
+  addOrReplaceUpdate,
+  applyEffortUpdates,
+  chooseEffort,
+  dedupeAdjacentUpdates,
+  effectiveEffort,
+  normalizeEffort,
+  validateUpdates,
+} from "./effort.js";
+export type { Effort, EffortChoice } from "./effort.js";
 export type { DowngradeDecision, DowngradeInput } from "./cache.js";
 export { attachUsageObserver, parseUsage, UsageScanner } from "./usage.js";
 export {

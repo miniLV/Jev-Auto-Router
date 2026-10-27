@@ -28,6 +28,10 @@ The design rationale, usage and configuration live in
 | Upgrade Trigger | The condition that permits moving to a stronger tier: explicit user request, a recent failure, or a high complexity signal. |
 | Session Store | The redacted persisted routing state keyed by conversation hash, with a TTL and no prompt text. |
 | Task Horizon | The caller's declared total turn budget. It can lock the model earlier than the session cap. |
+| Effort Baseline | The request-level reasoning effort kept unchanged so the prompt prefix remains cacheable. |
+| Authored Effort Update | A `configuration_update` item that changes effort for subsequent responses while preserving the earlier prefix. |
+| Effort Cap | The maximum effort an automatic decision may select. |
+| Effort Routing | Selecting effort per turn without changing the model. |
 | Decision Record | A redacted record of one turn decision. It contains a prompt hash and length, never prompt text. |
 | Commentary | The optional one-line Codex event that reports the route. It can be disabled with `JEV_CODEX_COMMENTARY=0`. |
 

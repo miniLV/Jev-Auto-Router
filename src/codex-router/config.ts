@@ -26,6 +26,8 @@ export const DEFAULT_UPGRADE_COMPLEXITY_THRESHOLD = 0.8;
 export const DEFAULT_UPGRADE_FAILURE_TTL_MS = 10 * 60 * 1000;
 export const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_LOCK_BEFORE_END_TURNS = 2;
+export const DEFAULT_EFFORT_CAP = "high";
+export const DEFAULT_EFFORT_FALLBACK = "high";
 export const DEFAULT_MIN_CONFIDENCE = 0.3;
 export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 export const DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -132,6 +134,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     taskTurnBudget: envInt(env, "JEV_CODEX_TASK_TURN_BUDGET", 0, 0),
     lockBeforeEndTurns: envInt(env, "JEV_CODEX_LOCK_BEFORE_END_TURNS", DEFAULT_LOCK_BEFORE_END_TURNS, 0),
     outputTokensPerTurn: envInt(env, "JEV_CODEX_OUTPUT_TOKENS_PER_TURN", DEFAULT_OUTPUT_TOKENS_PER_TURN, 0),
+    effortRouting: envString(env, "JEV_CODEX_EFFORT_ROUTING") === "off" ? "off" : "turn",
+    effortCap: envString(env, "JEV_CODEX_EFFORT_CAP") ?? DEFAULT_EFFORT_CAP,
+    effortFallback: envString(env, "JEV_CODEX_EFFORT_FALLBACK") ?? DEFAULT_EFFORT_FALLBACK,
     upgradeMode: (envString(env, "JEV_CODEX_UPGRADE_MODE") === "always" ? "always" : "triggered") as UpgradeMode,
     upgradeComplexityThreshold: Math.min(
       1,
@@ -202,6 +207,7 @@ interface CatalogEntry {
   supported_in_api?: unknown;
   supported_reasoning_levels?: unknown;
   default_reasoning_level?: unknown;
+  supports_reasoning_effort_updates?: unknown;
   context_window?: unknown;
 }
 
@@ -265,6 +271,7 @@ export function candidatesFromCatalog(payload: unknown, tiers: TierModels, allow
       description: descriptionOf(entry, tier),
       supportedEfforts: efforts,
       defaultEffort,
+      supportsEffortUpdates: entry.supports_reasoning_effort_updates === true,
       fromCatalog: true,
     });
   }
@@ -278,6 +285,7 @@ export function candidatesFromCatalog(payload: unknown, tiers: TierModels, allow
       tier,
       description: `${tiers[tier]}; Tier: ${tier}`,
       supportedEfforts: [],
+      supportsEffortUpdates: false,
       fromCatalog: false,
     }));
 }

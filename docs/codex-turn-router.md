@@ -53,12 +53,15 @@ starts Codex without routing.
    message is a continuation, so it reuses the pinned model.
 3. On a fresh turn, it sends Jev the prompt, current model, approximate context
    size and available models.
-4. The policy applies explicit override, confidence, availability and the cache
-   downgrade gate.
-5. The proxy writes the real model into the request and forwards the CLI's
-   authorization headers unchanged.
-6. Tool-loop continuations keep the same model.
-7. A new user turn may choose a different model.
+4. The policy applies explicit override, confidence, availability, the cache
+   downgrade gate, session guards and upgrade triggers.
+5. The proxy writes the real model, selects effort from Jev's scores, and
+   inserts/replays `configuration_update` items while keeping the top-level
+   effort unchanged.
+6. The proxy forwards the CLI's authorization headers unchanged.
+7. Tool-loop continuations keep the same model and replay the existing effort
+   updates.
+8. A new user turn may choose a different model and effort.
 
 The proxy adds one commentary line by default so the user can see the choice.
 Set `JEV_CODEX_COMMENTARY=0` to disable it.
@@ -119,6 +122,22 @@ declares an expected turn horizon; the router locks at
 `budget - JEV_CODEX_LOCK_BEFORE_END_TURNS` and uses the remaining turns in the
 break-even. `JEV_CODEX_OUTPUT_TOKENS_PER_TURN` estimates output cost.
 
+## Effort routing
+
+The model stays pinned while effort can change at a turn boundary. The router:
+
+- keeps the request-level `reasoning.effort` as the baseline;
+- maps Jev's `task_complexity` and `reasoning_required` scores to an effort;
+- caps the result with `JEV_CODEX_EFFORT_CAP`;
+- uses `configuration_update` items, never top-level effort changes;
+- reinserts earlier updates at their original history anchors so the prefix
+  stays cacheable;
+- resets the baseline on compaction or a model change.
+
+Effort routing only runs when the selected model advertises
+`supports_reasoning_effort_updates` and supported efforts. It is per-turn, not
+per-step. A model that does not support updates keeps the request-level path.
+
 ## Cache warmth
 
 The proxy scans the response's terminal usage event for `cached_tokens` and
@@ -171,6 +190,9 @@ is opt-in because it trades context fidelity for switchability.
 | `JEV_CODEX_MAX_SWITCHES` | `0` | Max model changes per session (`0` = unlimited) |
 | `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | Full turns to keep a newly switched model |
 | `JEV_CODEX_CACHE_TTL_MS` | `1800000` | Idle time before guards reset |
+| `JEV_CODEX_EFFORT_ROUTING` | `turn` | `off` or per-turn effort |
+| `JEV_CODEX_EFFORT_CAP` | `high` | Maximum effort |
+| `JEV_CODEX_EFFORT_FALLBACK` | `high` | Effort when scores are missing |
 | `JEV_CODEX_PRICES` | unset | Per-model JSON price table for break-even |
 | `JEV_CODEX_ASSUMED_REMAINING_TURNS` | `3` | Remaining turns for break-even when no task budget |
 | `JEV_CODEX_TASK_TURN_BUDGET` | `0` | Declared task horizon (`0` = off) |

@@ -24,6 +24,9 @@ test("loads optimization knobs from the environment", () => {
     JEV_CODEX_SESSION_FILE: "/tmp/jev-sessions.json",
     JEV_CODEX_SESSION_TTL_MS: "60000",
     JEV_CODEX_STRIP_ENCRYPTED_REASONING: "1",
+    JEV_CODEX_EFFORT_ROUTING: "off",
+    JEV_CODEX_EFFORT_CAP: "max",
+    JEV_CODEX_EFFORT_FALLBACK: "medium",
     JEV_CODEX_PRICES: JSON.stringify({
       "gpt-6-sol": { input: 1, cached_input: 0.1, cache_write_input: 1.25, output: 4 },
     }),
@@ -34,5 +37,8 @@ test("loads optimization knobs from the environment", () => {
   assert.equal(config.sessionFile, "/tmp/jev-sessions.json");
   assert.equal(config.sessionTtlMs, 60_000);
   assert.equal(config.stripEncryptedReasoning, true);
+  assert.equal(config.effortRouting, "off");
+  assert.equal(config.effortCap, "max");
+  assert.equal(config.effortFallback, "medium");
   assert.equal(config.prices?.["gpt-6-sol"]?.cacheWriteInput, 1.25);
 });

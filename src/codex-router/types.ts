@@ -25,6 +25,8 @@ export interface ModelCandidate {
   description: string;
   supportedEfforts: string[];
   defaultEffort?: string;
+  /** Provider advertises cache-preserving mid-conversation reasoning updates. */
+  supportsEffortUpdates: boolean;
   fromCatalog: boolean;
 }
 
@@ -46,6 +48,12 @@ export interface CacheObservation {
   warm: boolean;
 }
 
+export interface EffortUpdate {
+  anchorIndex: number;
+  anchorSignature: string;
+  effort: string;
+}
+
 export interface SessionState {
   tier: Tier;
   model: string;
@@ -57,6 +65,9 @@ export interface SessionState {
   lastContextTokens?: number;
   cache?: CacheObservation;
   lastFailureAt?: number;
+  effortModel?: string;
+  effortBaseline?: string;
+  effortUpdates?: EffortUpdate[];
 }
 
 export type UpgradeMode = "always" | "triggered";
@@ -77,6 +88,9 @@ export interface RouterConfig {
   taskTurnBudget: number;
   lockBeforeEndTurns: number;
   outputTokensPerTurn: number;
+  effortRouting: "off" | "turn";
+  effortCap: string;
+  effortFallback: string;
   upgradeMode: UpgradeMode;
   upgradeComplexityThreshold: number;
   upgradeFailureTtlMs: number;

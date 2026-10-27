@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Turn Router · 优化控制面</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #625e56;
+      --grid: rgba(37, 42, 49, .055);
+      --blue: #3867d6;
+      --blue-soft: #e0eaff;
+      --teal: #20898d;
+      --teal-soft: #d5f2ee;
+      --green: #3f8f52;
+      --green-soft: #e1f2d7;
+      --orange: #d76838;
+      --orange-soft: #ffe5d1;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff1b5;
+      --pink: #d35f84;
+      --pink-soft: #ffe3eb;
+      --red: #b84736;
+      --red-soft: #ffe1da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    .page {
+      position: relative;
+      width: 1600px;
+      height: 1000px;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+    }
+    .kicker {
+      position: absolute;
+      top: 37px;
+      left: 56px;
+      color: var(--teal);
+      font: 900 15px "Avenir Next", "PingFang SC", sans-serif;
+      letter-spacing: .16em;
+    }
+    h1 {
+      position: absolute;
+      top: 60px;
+      left: 53px;
+      margin: 0;
+      font-size: 44px;
+      line-height: 1.12;
+    }
+    .subtitle {
+      position: absolute;
+      top: 114px;
+      left: 56px;
+      width: 980px;
+      color: var(--muted);
+      font: 700 17px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp {
+      position: absolute;
+      top: 42px;
+      right: 54px;
+      width: 340px;
+      padding: 12px 18px;
+      border: 3px solid var(--blue);
+      border-radius: 19px 15px 21px 16px;
+      background: var(--blue-soft);
+      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
+      transform: rotate(1.2deg);
+      font: 800 14px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp b {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--blue);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
+      font-size: 18px;
+    }
+    .lane {
+      position: absolute;
+      top: 180px;
+      height: 740px;
+      border: 2px dashed rgba(37,42,49,.29);
+      border-radius: 28px 23px 30px 25px;
+      background: rgba(255,255,255,.3);
+    }
+    .lane.evidence { left: 45px; width: 480px; }
+    .lane.decision { left: 550px; width: 500px; }
+    .lane.action { left: 1075px; width: 480px; }
+    .lane-label {
+      position: absolute;
+      left: 28px;
+      top: -17px;
+      padding: 4px 14px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 15px 12px;
+      background: var(--paper);
+      font-size: 17px;
+      font-weight: 900;
+      z-index: 6;
+    }
+    .card {
+      position: absolute;
+      z-index: 3;
+      padding: 13px 16px;
+      border: 3px solid var(--stroke);
+      border-radius: 20px 16px 22px 17px;
+      background: var(--fill);
+      box-shadow: 6px 7px 0 rgba(37,42,49,.11);
+      transform: rotate(var(--tilt, 0deg));
+    }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+    .red { --stroke: var(--red); --fill: var(--red-soft); }
+    .card h2 { margin: 0 0 6px; font-size: 20px; line-height: 1.12; }
+    .card p { margin: 0; color: #3f4242; font: 700 13px/1.5 "Avenir Next", "PingFang SC", sans-serif; }
+    .e1 { left: 75px; top: 218px; width: 420px; height: 140px; --tilt: -.4deg; }
+    .e2 { left: 75px; top: 378px; width: 420px; height: 140px; --tilt: .4deg; }
+    .e3 { left: 75px; top: 538px; width: 420px; height: 140px; --tilt: -.3deg; }
+    .e4 { left: 75px; top: 698px; width: 420px; height: 150px; --tilt: .3deg; }
+    .d1 { left: 580px; top: 218px; width: 440px; height: 210px; --tilt: .3deg; }
+    .d2 { left: 580px; top: 448px; width: 440px; height: 210px; --tilt: -.3deg; }
+    .d3 { left: 580px; top: 678px; width: 440px; height: 170px; --tilt: .3deg; }
+    .a1 { left: 1105px; top: 218px; width: 420px; height: 140px; --tilt: .4deg; }
+    .a2 { left: 1105px; top: 378px; width: 420px; height: 140px; --tilt: -.4deg; }
+    .a3 { left: 1105px; top: 538px; width: 420px; height: 140px; --tilt: .3deg; }
+    .a4 { left: 1105px; top: 698px; width: 420px; height: 150px; --tilt: -.3deg; }
+    .mono {
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+      background: rgba(255,255,255,.55);
+      padding: 1px 5px;
+      border-radius: 5px;
+    }
+    .footer {
+      position: absolute;
+      left: 45px;
+      top: 944px;
+      width: 1510px;
+      padding: 9px 18px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 16px 12px;
+      background: rgba(255,252,243,.92);
+      box-shadow: 5px 5px 0 rgba(37,42,49,.09);
+      font: 800 14px/1.4 "Avenir Next", "PingFang SC", sans-serif;
+      z-index: 5;
+    }
+    .footer b { color: var(--green); }
+    .edge-label {
+      position: absolute;
+      z-index: 7;
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--muted);
+      font: 800 12px "Avenir Next", "PingFang SC", sans-serif;
+      white-space: nowrap;
+    }
+    svg.paths { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .main { fill: none; stroke: var(--ink); stroke-width: 2.8; stroke-linejoin: round; marker-end: url(#arrow-ink); }
+    .feedback { fill: none; stroke: var(--pink); stroke-width: 2.6; stroke-dasharray: 8 7; stroke-linejoin: round; marker-end: url(#arrow-pink); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX TURN ROUTER · CONTROL PLANE</div>
+    <h1>优化控制面：缓存、价格、会话与 effort</h1>
+    <div class="subtitle">模型固定、effort 可变；每次决策都带证据和边界，所有阈值可配置。</div>
+    <div class="stamp"><b>核心拆分</b>模型是粗粒度变量；effort 是细粒度变量。不要为了 effort 切模型。</div>
+
+    <div class="lane evidence"><span class="lane-label">① 证据输入</span></div>
+    <div class="lane decision"><span class="lane-label">② 决策</span></div>
+    <div class="lane action"><span class="lane-label">③ 执行与记录</span></div>
+
+    <svg class="paths" width="1600" height="1000" viewBox="0 0 1600 1000" aria-hidden="true">
+      <defs>
+        <marker id="arrow-ink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/></marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d35f84"/></marker>
+      </defs>
+      <path class="main" d="M525 500 L541 500"/>
+      <path class="main" d="M1050 500 L1066 500"/>
+      <path class="feedback" d="M1315 895 L285 895"/>
+    </svg>
+
+    <section class="card orange e1">
+      <h2>Jev 复杂度评分</h2>
+      <p><span class="mono">taskComplexity</span> · <span class="mono">reasoningRequired</span> · <span class="mono">toolComplexity</span><br>
+      决定本轮 effort 的输入；不是靠关键词猜。</p>
+    </section>
+    <section class="card teal e2">
+      <h2>响应 usage</h2>
+      <p><span class="mono">cached_tokens</span> · <span class="mono">cache_write_input_tokens</span><br>
+      观测当前模型缓存是否还热；冷缓存降低切换成本。</p>
+    </section>
+    <section class="card blue e3">
+      <h2>Session store</h2>
+      <p>pin · turns · switches · cooldown · cache · effort baseline<br>
+      `~/.codex-router/sessions.json`，0600，不存 prompt。</p>
+    </section>
+    <section class="card green e4">
+      <h2>价格与剩余 turn</h2>
+      <p><span class="mono">input / cached_input / cache_write_input / output</span><br>
+      任务预算 → 剩余 turn → 降级 break-even。</p>
+    </section>
+
+    <section class="card yellow d1">
+      <h2>模型 gate</h2>
+      <p>
+        ① 价格表 → break-even；没有价格表 → 20k 阈值<br>
+        ② 冷缓存 → 降级放行；热缓存 → 算成本<br>
+        ③ 升级只认 failure / 高复杂度 / 用户指定<br>
+        ④ 超过 N 轮、切换预算或 cooldown → 锁定
+      </p>
+    </section>
+    <section class="card pink d2">
+      <h2>Effort gate</h2>
+      <p>
+        ① 评分 → low / medium / high / xhigh / max<br>
+        ② 受模型 supported efforts 与 cap 约束<br>
+        ③ request-level effort 保持 baseline<br>
+        ④ 变化用 <span class="mono">configuration_update</span>；历史 update 原地重放
+      </p>
+    </section>
+    <section class="card red d3">
+      <h2>重置边界</h2>
+      <p>
+        compaction → 清 cache 热度 + effort updates<br>
+        encrypted reasoning → opt-in 剥离<br>
+        model 变化 → 重建 effort baseline<br>
+        历史 anchor 失效 → 丢弃旧 updates
+      </p>
+    </section>
+
+    <section class="card blue a1">
+      <h2>转发请求</h2>
+      <p>model 固定；top-level effort 不动；<br>
+      注入 / 重放 <span class="mono">configuration_update</span>，流式响应原样返回。</p>
+    </section>
+    <section class="card teal a2">
+      <h2>观测响应</h2>
+      <p>被动扫描 SSE usage；不修改 Codex 流。<br>
+      记录 cache warmth、失败标记和延迟。</p>
+    </section>
+    <section class="card green a3">
+      <h2>持久化</h2>
+      <p>session pin、turn/switch、cache、effort baseline。<br>
+      决策日志只记 hash / 模型 / effort / 原因。</p>
+    </section>
+    <section class="card orange a4">
+      <h2>下一轮</h2>
+      <p>reload session → 校验 anchor → 计算 gate →<br>
+      选 model / effort → 再转发。空闲超 TTL 重置。</p>
+    </section>
+
+    <div class="edge-label" style="left: 456px; top: 482px;">signals</div>
+    <div class="edge-label" style="left: 1010px; top: 482px;">decision</div>
+    <div class="edge-label" style="left: 700px; top: 875px; color: var(--pink);">persist → next turn</div>
+    <div class="footer"><b>一句话：</b>模型只在 turn 边界变；effort 用 cache-preserving update 变；价格、缓存、会话和失败都进入同一个确定性闸门。</div>
+  </main>
+</body>
+</html>

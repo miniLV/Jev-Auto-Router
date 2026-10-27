@@ -2,7 +2,7 @@
 
 ## 项目结构与模块组织
 
-主路径位于 `src/codex-router/`：`config` 负责 tier 与环境配置，`turn` 识别 fresh user turn，`policy` 做确定性决策，`cache` 做价格 break-even，`usage` 读取缓存热度，`session-store` 持久化 pin，`jev` 调用 Jev，`proxy` 转发并固定模型，`cli` 启动真实 Codex。入口是 `bin/jev-codex.mjs`。旧的逐调用路径已经移除，历史留在 git。相关测试放在 `test/`，文件名采用 `*.test.ts`。设计说明位于 [docs/codex-turn-router.md](docs/codex-turn-router.md)。`dist/` 是生成目录，不要直接编辑或提交其中内容。
+主路径位于 `src/codex-router/`：`config` 负责 tier 与环境配置，`turn` 识别 fresh user turn，`policy` 做确定性决策，`cache` 做价格 break-even，`effort` 做 effort 映射与 configuration_update 重放，`usage` 读取缓存热度，`session-store` 持久化 pin，`jev` 调用 Jev，`proxy` 转发并固定模型，`cli` 启动真实 Codex。入口是 `bin/jev-codex.mjs`。旧的逐调用路径已经移除，历史留在 git。相关测试放在 `test/`，文件名采用 `*.test.ts`。设计说明位于 [docs/codex-turn-router.md](docs/codex-turn-router.md)。`dist/` 是生成目录，不要直接编辑或提交其中内容。
 
 ## 构建、测试与开发命令
 

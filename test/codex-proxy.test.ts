@@ -25,9 +25,9 @@ async function upstreamServer(records: Recorded[], usage?: Record<string, unknow
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({
           models: [
-            { slug: "gpt-6-luna", display_name: "Luna", visibility: "list", supported_in_api: true, supported_reasoning_levels: [{ effort: "medium" }] },
-            { slug: "gpt-6-sol", display_name: "Sol", visibility: "list", supported_in_api: true, supported_reasoning_levels: [{ effort: "medium" }, { effort: "high" }] },
-            { slug: "gpt-6.1-sol", display_name: "Sol 6.1", visibility: "list", supported_in_api: true, supported_reasoning_levels: [{ effort: "medium" }, { effort: "high" }] },
+            { slug: "gpt-6-luna", display_name: "Luna", visibility: "list", supported_in_api: true, supports_reasoning_effort_updates: true, supported_reasoning_levels: [{ effort: "low" }, { effort: "medium" }, { effort: "high" }] },
+            { slug: "gpt-6-sol", display_name: "Sol", visibility: "list", supported_in_api: true, supports_reasoning_effort_updates: true, supported_reasoning_levels: [{ effort: "low" }, { effort: "medium" }, { effort: "high" }] },
+            { slug: "gpt-6.1-sol", display_name: "Sol 6.1", visibility: "list", supported_in_api: true, supports_reasoning_effort_updates: true, supported_reasoning_levels: [{ effort: "low" }, { effort: "medium" }, { effort: "high" }] },
           ],
         }));
         return;
@@ -64,6 +64,9 @@ function config(baseUrl: string, overrides: Partial<RouterConfig> = {}): RouterC
     taskTurnBudget: 0,
     lockBeforeEndTurns: 2,
     outputTokensPerTurn: 1_000,
+    effortRouting: "off",
+    effortCap: "high",
+    effortFallback: "high",
     upgradeMode: "always",
     upgradeComplexityThreshold: 0.8,
     upgradeFailureTtlMs: 10 * 60 * 1000,
@@ -533,6 +536,96 @@ test("a compaction resets cache warmth before the next decision", async () => {
     assert.equal(calls, 2);
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
     assert.equal(forwarded.model, "gpt-6-luna");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+test("effort updates keep the top-level effort and reinsert earlier updates", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records);
+  let calls = 0;
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, { effortRouting: "turn", effortCap: "high", switchCooldownTurns: 0 }),
+    route: async () => {
+      calls += 1;
+      return {
+        answer: {
+          choice: "gpt-6-luna",
+          confidence: 0.95,
+          model: "jev",
+          latencyMs: 1,
+          scores: {
+            taskComplexity: calls === 1 ? 0.8 : 0.1,
+            reasoningRequired: calls === 1 ? 0.8 : 0.1,
+            toolComplexity: 0.1,
+            contextSize: 0,
+          },
+        },
+      };
+    },
+    log: new NoopDecisionLog(),
+  });
+  try {
+    await fetch(`http://127.0.0.1:${proxy.port}/models`).then((response) => response.text());
+    const tools = [{ type: "function", name: "exec_command", parameters: { type: "object" } }];
+    const first = JSON.stringify({
+      model: "jev-router",
+      prompt_cache_key: "effort-session",
+      stream: true,
+      reasoning: { effort: "medium" },
+      tools,
+      input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "one" }] }],
+    });
+    await (await post(`http://127.0.0.1:${proxy.port}`, first)).text();
+    const firstBody = JSON.parse(records.at(-1)!.body) as { reasoning: { effort: string }; input: Array<Record<string, unknown>> };
+    assert.equal(firstBody.reasoning.effort, "medium");
+    assert.equal(firstBody.input[0].type, "configuration_update");
+    assert.equal((firstBody.input[0].reasoning as { effort: string }).effort, "high");
+
+    const continuation = JSON.stringify({
+      model: "jev-router",
+      prompt_cache_key: "effort-session",
+      stream: true,
+      reasoning: { effort: "medium" },
+      tools,
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "one" }] },
+        { type: "function_call", call_id: "call_1" },
+        { type: "function_call_output", call_id: "call_1", output: "ok" },
+      ],
+    });
+    await (await post(`http://127.0.0.1:${proxy.port}`, continuation)).text();
+    assert.equal(calls, 1);
+    const continuationBody = JSON.parse(records.at(-1)!.body) as { input: Array<Record<string, unknown>> };
+    assert.equal(continuationBody.input[0].type, "configuration_update");
+
+    const second = JSON.stringify({
+      model: "jev-router",
+      prompt_cache_key: "effort-session",
+      stream: true,
+      reasoning: { effort: "medium" },
+      tools,
+      input: [
+        { type: "message", role: "user", content: [{ type: "input_text", text: "one" }] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "done" }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "two" }] },
+      ],
+    });
+    await (await post(`http://127.0.0.1:${proxy.port}`, second)).text();
+    assert.equal(calls, 2);
+    const secondBody = JSON.parse(records.at(-1)!.body) as { reasoning: { effort: string }; input: Array<Record<string, unknown>> };
+    assert.equal(secondBody.reasoning.effort, "medium");
+    assert.deepEqual(secondBody.input.map((item) => item.type === "configuration_update" ? "update" : item.role), [
+      "update",
+      "user",
+      "assistant",
+      "update",
+      "user",
+    ]);
+    assert.equal((secondBody.input[0].reasoning as { effort: string }).effort, "high");
+    assert.equal((secondBody.input[3].reasoning as { effort: string }).effort, "low");
   } finally {
     await proxy.close();
     await new Promise<void>((resolve) => upstream.server.close(() => resolve()));

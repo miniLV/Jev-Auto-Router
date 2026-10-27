@@ -181,7 +181,7 @@
     <div class="kicker">CODEX TURN ROUTER</div>
     <h1>Codex Turn Router｜主流程</h1>
     <div class="subtitle">一个 user turn 只问一次 Jev；tool loop 内模型固定。</div>
-    <div class="stamp"><b>核心约束</b>Turn 内不换模型；下一个 Turn 才重新判断。</div>
+    <div class="stamp"><b>核心约束</b>Turn 内模型固定；effort 可调；下一个 Turn 才重新判断。</div>
 
     <div class="lane flow"><span class="lane-label">① 请求主链路</span></div>
     <div class="lane notes"><span class="lane-label">② 决策与边界</span></div>
@@ -206,39 +206,40 @@
     <section class="card blue step s1"><h2>你发一句话</h2><p>一个 Turn 的起点</p></section>
     <section class="card teal step s2"><h2>jev-codex 包装器</h2><p>启动真实 Codex；临时 provider</p></section>
     <section class="card yellow step s3"><h2>fresh user turn?</h2><p>有新的用户消息？</p></section>
-    <section class="card orange step s4"><h2>问 Jev 一次</h2><p>prompt + 当前模型 + 上下文</p></section>
-    <section class="card yellow step s5"><h2>政策闸门</h2><p>确定性规则，不做第二次语义选择</p></section>
-    <section class="card green step s6"><h2>固定本轮模型</h2><p>本轮不再问 Jev</p></section>
+    <section class="card orange step s4"><h2>问 Jev 一次</h2><p>prompt + 当前模型 + 上下文 + 候选</p></section>
+    <section class="card yellow step s5"><h2>政策闸门</h2><p>用户 / 置信 / 价格 / 缓存 / 稳定 / 升级</p></section>
+    <section class="card green step s6"><h2>固定本轮模型</h2><p>effort 用 configuration_update</p></section>
     <section class="card blue branch"><h2>否：沿用本轮模型</h2><p>tool 结果 / 继续，不重新选</p></section>
-    <section class="card green tool"><h2>Tool Loop：不再问 Jev</h2><p>模型 ↔ 工具来回；结束后给最终回答。Jev 延迟只在本轮第一跳。</p></section>
+    <section class="card green tool"><h2>Tool Loop：模型不变</h2><p>模型 ↔ 工具来回；effort 只在本轮开始时更新。Jev 延迟只在本轮第一跳。</p></section>
 
     <section class="card yellow note n1">
       <h2>政策闸门看什么</h2>
       <p>
         ① 用户说 use ... → 用户优先<br>
-        ② Jev 失败 / 超时 / 低置信 → 保持当前<br>
+        ② Jev 失败 / 低置信 → 保持当前<br>
         ③ 低置信不降级；升级最多 balanced<br>
-        ④ 上下文过大 → 不降级<br>
-        ⑤ 目标 tier 不可用 → 向上找
+        ④ 价格 / 缓存 → 降级 break-even<br>
+        ⑤ 升级需要 failure / 高复杂度 trigger<br>
+        ⑥ 目标 tier 不可用 → 向上找
       </p>
     </section>
     <section class="card orange note n2">
       <h2>缓存边界</h2>
       <p>
-        切一次，重建一次。<br>
-        价格表 → break-even；冷缓存 → 可放行。<br>
-        大上下文挡住降级；升级仍可能。<br>
+        切模型 = 重建一次 prefix。<br>
+        价格表 + 剩余 turn → break-even。<br>
+        冷缓存 → 降级可放行。<br>
         超过 N 轮 / 预算用完 → 锁定。
       </p>
     </section>
     <section class="card teal note n3">
-      <h2>入口与日志</h2>
+      <h2>Effort 与持久化</h2>
       <p>
-        真实 Codex + 临时 provider；<br>
-        picker 里出现 <code>jev-router</code>；<br>
-        手动选真实模型绕过路由；<br>
-        日志只记 hash、长度、模型和原因；<br>
-        <code>JEV_CODEX_COMMENTARY=0</code> 关闭路由提示。
+        request-level effort 保持 baseline；<br>
+        effort 变化用 <code>configuration_update</code>；<br>
+        历史 update 原地重放，prefix 可缓存；<br>
+        session.json 持久化 pin / counters；<br>
+        compaction 重置 cache 与 effort。
       </p>
     </section>
 
