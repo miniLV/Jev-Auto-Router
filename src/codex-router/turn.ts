@@ -168,3 +168,32 @@ export function hashPrompt(prompt: string): string {
 export function promptChars(prompt: string): number {
   return [...prompt].length;
 }
+
+/** A compaction changes the cache prefix; the caller should reset cache warmth. */
+export function hasCompaction(input: unknown): boolean {
+  return Array.isArray(input) && input.some((item) => isRecord(item) && typeof item.type === "string" && COMPACTION_TYPES.has(item.type));
+}
+
+/**
+ * Remove provider-bound encrypted reasoning before a cross-model continuation.
+ * A readable summary or content is preserved. Items with neither are dropped.
+ * Returns the number of reasoning items changed or removed.
+ */
+export function stripForeignReasoning(body: ResponsesBody): number {
+  if (!Array.isArray(body.input)) return 0;
+  let changed = 0;
+  const kept: unknown[] = [];
+  for (const raw of body.input) {
+    if (!isRecord(raw) || raw.type !== "reasoning" || typeof raw.encrypted_content !== "string") {
+      kept.push(raw);
+      continue;
+    }
+    changed += 1;
+    const { encrypted_content: _encrypted, id: _id, ...rest } = raw;
+    const summary = Array.isArray(rest.summary) ? rest.summary.length > 0 : false;
+    const content = Array.isArray(rest.content) ? rest.content.length > 0 : false;
+    if (summary || content) kept.push(rest);
+  }
+  body.input = kept;
+  return changed;
+}

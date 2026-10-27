@@ -28,6 +28,39 @@ export interface ModelCandidate {
   fromCatalog: boolean;
 }
 
+export interface ModelPrice {
+  input: number;
+  cachedInput: number;
+  cacheWriteInput: number;
+  output: number;
+}
+
+export type PriceTable = Record<string, ModelPrice>;
+
+export interface CacheObservation {
+  inputTokens: number;
+  cachedTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  at: number;
+  warm: boolean;
+}
+
+export interface SessionState {
+  tier: Tier;
+  model: string;
+  updatedAt: number;
+  turns: number;
+  switches: number;
+  turnsSinceSwitch: number;
+  lastPromptHash?: string;
+  lastContextTokens?: number;
+  cache?: CacheObservation;
+  lastFailureAt?: number;
+}
+
+export type UpgradeMode = "always" | "triggered";
+
 export interface RouterConfig {
   tiers: TierModels;
   allowLong: boolean;
@@ -39,6 +72,17 @@ export interface RouterConfig {
   switchCooldownTurns: number;
   cacheTtlMs: number;
   contextWindowTokens: number;
+  prices?: PriceTable;
+  assumedRemainingTurns: number;
+  taskTurnBudget: number;
+  lockBeforeEndTurns: number;
+  outputTokensPerTurn: number;
+  upgradeMode: UpgradeMode;
+  upgradeComplexityThreshold: number;
+  upgradeFailureTtlMs: number;
+  stripEncryptedReasoning: boolean;
+  sessionTtlMs: number;
+  sessionFile?: string;
   jevModel: string;
   jevEndpoint: string;
   jevTimeoutMs: number;

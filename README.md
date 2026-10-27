@@ -59,7 +59,7 @@ jev-codex exec "fix the failing test"
   -> jev-codex 包装器启动真实 Codex，注入临时 provider
   -> 代理识别 fresh user turn
   -> 问 Jev 一次：prompt + 当前模型 + 上下文大小 + 候选模型
-  -> 政策闸门：用户指定 / 低置信 / 不可用 / 大上下文降级
+  -> 政策闸门：用户指定 / 低置信 / 不可用 / 价格 break-even / 稳定保护
   -> 固定本轮模型
   -> tool loop 全部复用该模型，不再问 Jev
   -> 下一个 user turn 再判断
@@ -75,6 +75,9 @@ jev-codex exec "fix the failing test"
 - 上下文超过阈值时，拒绝降级；升级仍可能。阈值是启发式，两个方向都要重建缓存。
 - 会话稳定保护：超过 12 个 fresh turn 后停止自动切换；每次切换后至少稳定 1 个 turn；可选切换次数上限。
 - 会话空闲超过 30 分钟后，稳定保护重置；模型仍保持，但下一轮可以重新评估。
+- 配了价格表时，降级改算 break-even；没配价格表才回退到固定上下文阈值。
+- 缓存热度从响应 usage 观测；冷缓存时降级可以绕过重建门槛。
+- 升级默认需要触发条件：近期失败、Jev 高复杂度信号，或用户显式指定。
 - 目标 tier 不可用：升到最近的可用 tier。
 - long tier 默认关闭，需要 `JEV_CODEX_ALLOW_LONG=1`。
 - 用户显式 `use ...` 永远绕过上述稳定保护。
@@ -96,6 +99,11 @@ jev-codex exec "fix the failing test"
 | `JEV_CODEX_MAX_SWITCHES` | `0` | 每个 session 最多切换次数（0 = 不限） |
 | `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | 切换后至少稳定几个 turn |
 | `JEV_CODEX_CACHE_TTL_MS` | `1800000` | 空闲多久后重置稳定保护 |
+| `JEV_CODEX_PRICES` | 未设置 | 每个模型的价格 JSON，用于 break-even |
+| `JEV_CODEX_TASK_TURN_BUDGET` | `0` | 预估任务总 turn 数（0 = 关闭） |
+| `JEV_CODEX_UPGRADE_MODE` | `triggered` | 升级触发模式 |
+| `JEV_CODEX_SESSION_FILE` | `~/.codex-router/sessions.json` | 持久化 session pin |
+| `JEV_CODEX_STRIP_ENCRYPTED_REASONING` | off | 跨模型时移除 encrypted reasoning |
 | `JEV_CODEX_COMMENTARY` | `1` | 在 Codex 中显示路由结果 |
 | `JEV_CODEX_LOG_FILE` | `~/.codex-router/decisions.jsonl` | 脱敏决策日志 |
 
@@ -119,6 +127,9 @@ src/codex-router/
 ├─ turn.ts      fresh user turn 识别与 conversation key
 ├─ jev.ts       Jev 请求构造、超时、重试、响应解析
 ├─ config.ts    tier、环境变量、候选模型
+├─ cache.ts     价格 break-even 与动态锁
+├─ usage.ts     响应 usage / 缓存热度扫描
+├─ session-store.ts  持久化 session pin
 ├─ log.ts       脱敏 JSONL 决策日志
 └─ types.ts     共享类型
 ```
@@ -126,9 +137,10 @@ src/codex-router/
 ## 已知边界
 
 - 上下文大小是 input 序列化长度的估算，不包含 tools；阈值是启发式，不是精确 token 数。
-- 降级闸门是阈值，不是价格 break-even。
-- 进程重启会丢失内存中的 pin；`codex resume` 可能重新判断。
-- encrypted reasoning 与 compaction 还需要实机验证。
+- 价格 break-even 需要自己提供价格表；没有价格表时回退到固定上下文阈值。
+- session pin 已持久化，但只在本机/本用户生效；跨机器仍会重新判断。
+- break-even 使用输出估算和剩余 turn 估算，不是供应商账单。
+- encrypted reasoning 清理是 opt-in，压缩行为仍需要实机验证。
 - commentary 会修改 Codex 事件流；需要字节级原样转发时设 `JEV_CODEX_COMMENTARY=0`。
 
 ## License

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { startCodexProxy } from "../src/codex-router/proxy.js";
 import { NoopDecisionLog } from "../src/codex-router/log.js";
+import { MemorySessionStore } from "../src/codex-router/session-store.js";
+import { conversationKey } from "../src/codex-router/turn.js";
 import type { JevResult, RouterConfig, RouteInput } from "../src/codex-router/types.js";
 
 interface Recorded {
@@ -12,7 +14,7 @@ interface Recorded {
   body: string;
 }
 
-async function upstreamServer(records: Recorded[]) {
+async function upstreamServer(records: Recorded[], usage?: Record<string, unknown>) {
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -31,7 +33,7 @@ async function upstreamServer(records: Recorded[]) {
         return;
       }
       res.writeHead(200, { "content-type": "text/event-stream" });
-      res.end(`event: response.completed\ndata: ${JSON.stringify({ response: { model: "test" } })}\n\n`);
+      res.end(`event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", response: { model: "test", usage } })}\n\n`);
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -57,6 +59,17 @@ function config(baseUrl: string, overrides: Partial<RouterConfig> = {}): RouterC
     switchCooldownTurns: 0,
     cacheTtlMs: 30 * 60 * 1000,
     contextWindowTokens: 200_000,
+    prices: undefined,
+    assumedRemainingTurns: 3,
+    taskTurnBudget: 0,
+    lockBeforeEndTurns: 2,
+    outputTokensPerTurn: 1_000,
+    upgradeMode: "always",
+    upgradeComplexityThreshold: 0.8,
+    upgradeFailureTtlMs: 10 * 60 * 1000,
+    stripEncryptedReasoning: false,
+    sessionTtlMs: 24 * 60 * 60 * 1000,
+    sessionFile: undefined,
     jevModel: "jev-1.13.0",
     jevEndpoint: "http://127.0.0.1:1/v1/systemone",
     jevTimeoutMs: 100,
@@ -327,6 +340,195 @@ test("an explicit user override still works after the session lock", async () =>
     const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "one"));
     await first.text();
     const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "use luna for this one"));
+    await second.text();
+    assert.equal(calls, 2);
+    const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
+    assert.equal(forwarded.model, "gpt-6-luna");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+
+test("price break-even blocks a downgrade when the remaining turns are too few", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records);
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, {
+      prices: {
+        "gpt-6-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6.1-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6-luna": { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 4 },
+      },
+      assumedRemainingTurns: 1,
+      switchCooldownTurns: 0,
+    }),
+    route: async () => ({ answer: { choice: "gpt-6-luna", confidence: 0.95, model: "jev", latencyMs: 1 } }),
+    log: new NoopDecisionLog(),
+  });
+  try {
+    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "x".repeat(100_000)));
+    await response.text();
+    const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
+    assert.equal(forwarded.model, "gpt-6-sol");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+test("cold observed cache lets a large-context downgrade pass", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records, {
+    input_tokens: 100_000,
+    input_tokens_details: { cached_tokens: 0 },
+    cache_write_input_tokens: 100_000,
+    output_tokens: 500,
+  });
+  const store = new MemorySessionStore();
+  let calls = 0;
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, {
+      prices: {
+        "gpt-6-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6.1-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6-luna": { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 4 },
+      },
+      assumedRemainingTurns: 1,
+      switchCooldownTurns: 0,
+    }),
+    route: async () => {
+      calls += 1;
+      return { answer: { choice: calls === 1 ? "gpt-6.1-sol" : "gpt-6-luna", confidence: 0.95, model: "jev", latencyMs: 1 } };
+    },
+    log: new NoopDecisionLog(),
+    store,
+  });
+  try {
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "keep the strong model"));
+    await first.text();
+    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "x".repeat(100_000)));
+    await second.text();
+    const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
+    assert.equal(forwarded.model, "gpt-6-luna");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+test("triggered upgrades require a failure or a high-complexity signal", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records);
+  let calls = 0;
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, { upgradeMode: "triggered", switchCooldownTurns: 0 }),
+    route: async () => {
+      calls += 1;
+      return {
+        answer: {
+          choice: calls === 1 ? "gpt-6-luna" : "gpt-6.1-sol",
+          confidence: 0.95,
+          model: "jev",
+          latencyMs: 1,
+          scores: {
+            taskComplexity: calls > 2 ? 0.9 : 0.2,
+            reasoningRequired: calls > 2 ? 0.9 : 0.2,
+            toolComplexity: 0.2,
+            contextSize: 0,
+          },
+        },
+      };
+    },
+    log: new NoopDecisionLog(),
+  });
+  try {
+    for (const prompt of ["first", "low", "high"]) {
+      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", prompt));
+      await response.text();
+    }
+    assert.equal(calls, 3);
+    const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
+    assert.equal(forwarded.model, "gpt-6.1-sol");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+test("loads a persisted session pin before routing", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records);
+  const store = new MemorySessionStore();
+  const key = conversationKey({
+    prompt_cache_key: "session-1",
+    input: [{ role: "user", content: "warmup" }],
+  });
+  store.states[key] = {
+    tier: "fast",
+    model: "gpt-6-luna",
+    updatedAt: Date.now(),
+    turns: 2,
+    switches: 1,
+    turnsSinceSwitch: 1,
+  };
+  let calls = 0;
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, { lockAfterTurns: 1 }),
+    route: async () => {
+      calls += 1;
+      return { answer: { choice: "gpt-6.1-sol", confidence: 0.95, model: "jev", latencyMs: 1 } };
+    },
+    log: new NoopDecisionLog(),
+    store,
+  });
+  try {
+    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "continue"));
+    await response.text();
+    assert.equal(calls, 0);
+    const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
+    assert.equal(forwarded.model, "gpt-6-luna");
+  } finally {
+    await proxy.close();
+    await new Promise<void>((resolve) => upstream.server.close(() => resolve()));
+  }
+});
+
+test("a compaction resets cache warmth before the next decision", async () => {
+  const records: Recorded[] = [];
+  const upstream = await upstreamServer(records);
+  let calls = 0;
+  const proxy = await startCodexProxy({
+    config: config(upstream.url, {
+      prices: {
+        "gpt-6-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6.1-sol": { input: 5, cachedInput: 0.5, cacheWriteInput: 6.25, output: 20 },
+        "gpt-6-luna": { input: 1, cachedInput: 0.1, cacheWriteInput: 1.25, output: 4 },
+      },
+      assumedRemainingTurns: 1,
+      switchCooldownTurns: 0,
+    }),
+    route: async () => {
+      calls += 1;
+      return { answer: { choice: calls === 1 ? "gpt-6.1-sol" : "gpt-6-luna", confidence: 0.95, model: "jev", latencyMs: 1 } };
+    },
+    log: new NoopDecisionLog(),
+  });
+  try {
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "first"));
+    await first.text();
+    const compacted = JSON.stringify({
+      model: "jev-router",
+      prompt_cache_key: "session-1",
+      stream: true,
+      tools: [{ type: "function", name: "exec_command", parameters: { type: "object" } }],
+      input: [
+        { type: "compaction" },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "x".repeat(100_000) }] },
+      ],
+    });
+    const second = await post(`http://127.0.0.1:${proxy.port}`, compacted);
     await second.text();
     assert.equal(calls, 2);
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };

@@ -23,6 +23,11 @@ The design rationale, usage and configuration live in
 | Switch Budget | The maximum number of model changes allowed in one session. |
 | Switch Cooldown | The minimum number of full turns a newly switched model stays pinned before another switch. |
 | Cache TTL | The idle interval after which the session stability guards reset because the old prefix cache would be cold anyway. |
+| Cache Warmth | Evidence from the last response usage that the current model's prefix was cached. A cold cache lowers the cost of switching. |
+| Price Break-even | The estimated number of turns needed for a downgrade's per-turn saving to repay the target model's cache rebuild. |
+| Upgrade Trigger | The condition that permits moving to a stronger tier: explicit user request, a recent failure, or a high complexity signal. |
+| Session Store | The redacted persisted routing state keyed by conversation hash, with a TTL and no prompt text. |
+| Task Horizon | The caller's declared total turn budget. It can lock the model earlier than the session cap. |
 | Decision Record | A redacted record of one turn decision. It contains a prompt hash and length, never prompt text. |
 | Commentary | The optional one-line Codex event that reports the route. It can be disabled with `JEV_CODEX_COMMENTARY=0`. |
 

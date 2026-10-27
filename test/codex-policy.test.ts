@@ -103,3 +103,32 @@ test("accepts an exact model change only when the policy accepted Jev", () => {
   assert.equal(shouldUseExactModel("jev/no-change", "strong", "strong"), true);
   assert.equal(shouldUseExactModel("low-confidence-no-downgrade/no-change", "strong", "strong"), false);
 });
+
+test("blocks an upgrade when no trigger is present", () => {
+  const result = decide({ ...base, current: "fast", jev: sure("strong"), allowUpgrade: false });
+  assert.equal(result.tier, "fast");
+  assert.match(result.reason, /upgrade-not-triggered/);
+});
+
+test("a price gate can refuse a downgrade before the context threshold", () => {
+  const result = decide({
+    ...base,
+    current: "strong",
+    jev: sure("fast"),
+    contextTokens: 0,
+    downgrade: { allowed: false, reason: "price-gate" },
+  });
+  assert.equal(result.tier, "strong");
+  assert.match(result.reason, /price-gate/);
+});
+
+test("a price gate can allow a downgrade above the context threshold", () => {
+  const result = decide({
+    ...base,
+    current: "strong",
+    jev: sure("fast"),
+    contextTokens: 500_000,
+    downgrade: { allowed: true },
+  });
+  assert.equal(result.tier, "fast");
+});

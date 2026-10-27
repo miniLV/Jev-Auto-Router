@@ -93,8 +93,64 @@ cooldown after the session has been idle past the cache lifetime. The model
 stays pinned, but the next turn may re-evaluate because the old cache would be
 cold anyway.
 
-An explicit `use <tier>` / `use <model>` always bypasses these guards. The
-guards are stability heuristics, not a price model.
+An explicit `use <tier>` / `use <model>` always bypasses these guards.
+
+## Cache economics
+
+When a price table is configured, the downgrade gate uses a break-even estimate
+instead of the fixed context threshold:
+
+```sh
+export JEV_CODEX_PRICES='{
+  "gpt-6-sol":   {"input": 1.0, "cached_input": 0.1, "cache_write_input": 1.25, "output": 4.0},
+  "gpt-6.1-sol": {"input": 1.0, "cached_input": 0.1, "cache_write_input": 1.25, "output": 4.0},
+  "gpt-6-luna":  {"input": 0.2, "cached_input": 0.02, "cache_write_input": 0.25, "output": 1.0}
+}'
+export JEV_CODEX_ASSUMED_REMAINING_TURNS=3
+```
+
+Include both the current and target model in the table. A missing price falls
+back to the context threshold.
+
+The estimate compares the target model's cache rebuild cost with the per-turn
+saving over the remaining turns. Missing prices fall back to the fixed
+`JEV_CODEX_DOWNGRADE_MAX_CONTEXT_TOKENS` gate. `JEV_CODEX_TASK_TURN_BUDGET`
+declares an expected turn horizon; the router locks at
+`budget - JEV_CODEX_LOCK_BEFORE_END_TURNS` and uses the remaining turns in the
+break-even. `JEV_CODEX_OUTPUT_TOKENS_PER_TURN` estimates output cost.
+
+## Cache warmth
+
+The proxy scans the response's terminal usage event for `cached_tokens` and
+`cache_write_input_tokens`. It never rewrites the stream. A response with zero
+cached tokens marks the current model cold; the next downgrade can skip the
+rebuild gate. Observations older than `JEV_CODEX_CACHE_TTL_MS` are ignored.
+
+## Upgrade trigger
+
+With `JEV_CODEX_UPGRADE_MODE=triggered` (the default), a higher tier is only
+accepted when at least one trigger holds:
+
+- a recent upstream failure (`JEV_CODEX_UPGRADE_FAILURE_TTL_MS`);
+- Jev's complexity signal at or above `JEV_CODEX_UPGRADE_COMPLEXITY_THRESHOLD`;
+- an explicit user override.
+
+Set `JEV_CODEX_UPGRADE_MODE=always` to restore the old behavior.
+
+## Session persistence
+
+Session routing state is stored in `~/.codex-router/sessions.json` (0600),
+keyed by the conversation hash. It contains the model, tier, counters and cache
+observation, never prompt text. Entries older than `JEV_CODEX_SESSION_TTL_MS`
+are dropped. Set `JEV_CODEX_SESSION_FILE` to change the path.
+
+## Compaction and encrypted reasoning
+
+A compaction item resets cache warmth and the switch cooldown: the old prefix
+is no longer the same cache. With
+`JEV_CODEX_STRIP_ENCRYPTED_REASONING=1`, a cross-model continuation removes
+provider-bound encrypted reasoning items and keeps any readable summary. This
+is opt-in because it trades context fidelity for switchability.
 
 ## Configuration
 
@@ -115,6 +171,17 @@ guards are stability heuristics, not a price model.
 | `JEV_CODEX_MAX_SWITCHES` | `0` | Max model changes per session (`0` = unlimited) |
 | `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | Full turns to keep a newly switched model |
 | `JEV_CODEX_CACHE_TTL_MS` | `1800000` | Idle time before guards reset |
+| `JEV_CODEX_PRICES` | unset | Per-model JSON price table for break-even |
+| `JEV_CODEX_ASSUMED_REMAINING_TURNS` | `3` | Remaining turns for break-even when no task budget |
+| `JEV_CODEX_TASK_TURN_BUDGET` | `0` | Declared task horizon (`0` = off) |
+| `JEV_CODEX_LOCK_BEFORE_END_TURNS` | `2` | Lock this many turns before the task horizon |
+| `JEV_CODEX_OUTPUT_TOKENS_PER_TURN` | `1000` | Output estimate for break-even |
+| `JEV_CODEX_UPGRADE_MODE` | `triggered` | `always` or `triggered` |
+| `JEV_CODEX_UPGRADE_COMPLEXITY_THRESHOLD` | `0.8` | Jev score that counts as an upgrade trigger |
+| `JEV_CODEX_UPGRADE_FAILURE_TTL_MS` | `600000` | How long a failure remains an upgrade trigger |
+| `JEV_CODEX_SESSION_FILE` | `~/.codex-router/sessions.json` | Persisted session state |
+| `JEV_CODEX_SESSION_TTL_MS` | `86400000` | Drop persisted sessions after this idle time |
+| `JEV_CODEX_STRIP_ENCRYPTED_REASONING` | off | Remove encrypted reasoning on a model switch |
 | `JEV_CODEX_JEV_TIMEOUT_MS` | `1500` | Per-attempt timeout |
 | `JEV_CODEX_JEV_DEADLINE_MS` | `3000` | Total deadline |
 | `JEV_CODEX_COMMENTARY` | `1` | Show a routing line in Codex |
@@ -123,7 +190,7 @@ guards are stability heuristics, not a price model.
 
 The decision log stores the prompt hash and character count, never the prompt
 text. It also stores the chosen tier and model, confidence, reason, context
-size and Jev scores.
+size, cache warmth, break-even evidence and Jev scores.
 
 ## Design notes
 
@@ -137,9 +204,24 @@ size and Jev scores.
 
 ## Known gaps
 
-- The context size is estimated from the serialized input, not tokenized.
-- The cache gate is a threshold, not a price-aware break-even calculation.
-- Process restarts lose the in-memory pin; `codex resume` may re-decide.
-- Encrypted reasoning items and compaction need explicit tests.
+- The context size is estimated from the serialized input, not tokenized; it
+  excludes tool definitions.
+- The price table is caller supplied. Missing prices fall back to the context
+  threshold.
+- Break-even uses an assumed output size and remaining-turn estimate; it is not
+  a vendor bill.
+- Persisted session state is local to this machine and user. Another machine
+  starts from the default model.
+- Compaction resets cache warmth, but real compaction and encrypted-reasoning
+  stripping still need live-session tests.
+- Cache warmth is observed from SSE `response.completed` usage only; a
+  non-streaming JSON response leaves it unknown.
+- The upgrade trigger sees upstream failures and Jev complexity, not tool-output
+  errors.
+- Encrypted-reasoning stripping is all-or-nothing when enabled; it may remove
+  readable reasoning from the same model.
+- The task horizon is caller declared, not inferred from task progress.
+- The break-even uses input-only prefix size and an output estimate; it is not
+  exact accounting.
 - The optional commentary modifies the Codex event stream; disable it if a
   byte-identical stream matters.

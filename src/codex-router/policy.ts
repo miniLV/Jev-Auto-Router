@@ -13,6 +13,10 @@ export interface PolicyInput {
   current: Tier;
   available: Tier[];
   contextTokens: number;
+  /** When false, an upgrade needs an explicit trigger. */
+  allowUpgrade?: boolean;
+  /** Result of the cache/price gate. Undefined falls back to the context threshold. */
+  downgrade?: { allowed: boolean; reason?: string };
   config: Pick<RouterConfig, "tiers" | "minConfidence" | "uncertainCeiling" | "downgradeMaxContextTokens" | "allowLong">;
 }
 
@@ -106,8 +110,18 @@ export function decide(input: PolicyInput): PolicyDecision {
     }
   }
 
-  if (rankOf(target) < rankOf(current) && contextTokens > config.downgradeMaxContextTokens) {
-    return settle(current, "downgrade-not-worth-cache-rebuild");
+  if (rankOf(target) > rankOf(current) && input.allowUpgrade === false) {
+    return settle(current, "upgrade-not-triggered");
+  }
+
+  if (rankOf(target) < rankOf(current)) {
+    if (input.downgrade) {
+      if (!input.downgrade.allowed) {
+        return settle(current, input.downgrade.reason ?? "downgrade-not-worth-cache-rebuild");
+      }
+    } else if (contextTokens > config.downgradeMaxContextTokens) {
+      return settle(current, "downgrade-not-worth-cache-rebuild");
+    }
   }
 
   return settle(target, reason);

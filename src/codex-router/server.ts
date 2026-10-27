@@ -1,5 +1,6 @@
 import { loadConfig } from "./config.js";
 import { startCodexProxy } from "./proxy.js";
+import { createSessionStore } from "./session-store.js";
 
 /** Standalone proxy for debugging; the normal entry point is `jev-codex`. */
 export async function main(): Promise<void> {
@@ -7,6 +8,7 @@ export async function main(): Promise<void> {
   const requestedPort = Number(process.env.JEV_CODEX_PORT ?? "0");
   const proxy = await startCodexProxy({
     config,
+    store: createSessionStore(config.sessionFile),
     port: Number.isInteger(requestedPort) && requestedPort >= 0 ? requestedPort : 0,
   });
   process.stdout.write(`codex-router listening on http://127.0.0.1:${proxy.port}\n`);

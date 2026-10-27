@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { loadConfig } from "./config.js";
 import { startCodexProxy } from "./proxy.js";
+import { createSessionStore } from "./session-store.js";
 import { AUTO_MODEL } from "./types.js";
 
 const PROVIDER = "jev";
@@ -86,7 +87,7 @@ export async function runCodex(): Promise<void> {
   let args = process.argv.slice(2);
   let close = async (): Promise<void> => {};
   if (config.apiKey) {
-    const proxy = await startCodexProxy({ config });
+    const proxy = await startCodexProxy({ config, store: createSessionStore(config.sessionFile) });
     close = proxy.close;
     args = buildCodexArgs(`http://127.0.0.1:${proxy.port}`, args);
     if (config.debug) process.stderr.write(`[jev] proxy listening on 127.0.0.1:${proxy.port}\n`);

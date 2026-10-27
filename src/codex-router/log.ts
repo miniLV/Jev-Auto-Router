@@ -22,6 +22,11 @@ export interface DecisionRecord {
   session_turns: number;
   session_switches: number;
   turns_since_switch: number;
+  cache_warm?: boolean | null;
+  downgrade_allowed?: boolean | null;
+  downgrade_reason?: string;
+  break_even_turns?: number | null;
+  upgrade_allowed?: boolean;
 }
 
 export interface DecisionLog {

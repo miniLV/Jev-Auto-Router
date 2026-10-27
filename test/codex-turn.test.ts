@@ -5,7 +5,9 @@ import {
   conversationKey,
   estimateContextTokens,
   freshTurnPrompt,
+  hasCompaction,
   hasToolSurface,
+  stripForeignReasoning,
 } from "../src/codex-router/turn.js";
 
 const tools = [{ type: "additional_tools", tools: [] }];
@@ -71,4 +73,25 @@ test("context estimate is a positive integer", () => {
   const value = estimateContextTokens([{ role: "user", content: "hello" }]);
   assert.equal(Number.isInteger(value), true);
   assert.equal(value > 0, true);
+});
+
+test("detects a compaction item", () => {
+  assert.equal(hasCompaction([{ type: "compaction" }]), true);
+  assert.equal(hasCompaction([{ role: "user", content: "hi" }]), false);
+});
+
+test("strips provider-bound encrypted reasoning but keeps readable summaries", () => {
+  const body = {
+    input: [
+      { type: "reasoning", id: "rs_1", encrypted_content: "opaque", summary: [{ type: "summary_text", text: "keep" }] },
+      { type: "reasoning", id: "rs_2", encrypted_content: "opaque" },
+      { role: "user", content: "next" },
+    ],
+  };
+  const changed = stripForeignReasoning(body);
+  assert.equal(changed, 2);
+  assert.deepEqual(body.input, [
+    { type: "reasoning", summary: [{ type: "summary_text", text: "keep" }] },
+    { role: "user", content: "next" },
+  ]);
 });

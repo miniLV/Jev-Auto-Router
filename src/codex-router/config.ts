@@ -1,8 +1,10 @@
 import type {
   ModelCandidate,
+  PriceTable,
   RouterConfig,
   Tier,
   TierModels,
+  UpgradeMode,
 } from "./types.js";
 import { AUTO_MODEL, TIERS, TIER_RANK } from "./types.js";
 
@@ -18,6 +20,12 @@ export const DEFAULT_DOWNGRADE_MAX_CONTEXT_TOKENS = 20_000;
 export const DEFAULT_LOCK_AFTER_TURNS = 12;
 export const DEFAULT_SWITCH_COOLDOWN_TURNS = 1;
 export const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
+export const DEFAULT_ASSUMED_REMAINING_TURNS = 3;
+export const DEFAULT_OUTPUT_TOKENS_PER_TURN = 1_000;
+export const DEFAULT_UPGRADE_COMPLEXITY_THRESHOLD = 0.8;
+export const DEFAULT_UPGRADE_FAILURE_TTL_MS = 10 * 60 * 1000;
+export const DEFAULT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_LOCK_BEFORE_END_TURNS = 2;
 export const DEFAULT_MIN_CONFIDENCE = 0.3;
 export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 export const DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -58,6 +66,33 @@ function envFlag(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boole
   return fallback;
 }
 
+function price(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/** Optional per-model prices, in currency units per million tokens. */
+export function parsePriceTable(raw: string | undefined): PriceTable | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    const table: PriceTable = {};
+    for (const [model, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const record = value as Record<string, unknown>;
+      const input = price(record.input);
+      const cachedInput = price(record.cached_input ?? record.cachedInput);
+      const cacheWriteInput = price(record.cache_write_input ?? record.cacheWriteInput);
+      const output = price(record.output);
+      if (input === undefined || cachedInput === undefined || cacheWriteInput === undefined || output === undefined) continue;
+      table[model] = { input, cachedInput, cacheWriteInput, output };
+    }
+    return Object.keys(table).length > 0 ? table : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseTier(value: unknown): Tier | undefined {
   return typeof value === "string" && (TIERS as readonly string[]).includes(value)
     ? (value as Tier)
@@ -92,6 +127,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     switchCooldownTurns: envInt(env, "JEV_CODEX_SWITCH_COOLDOWN_TURNS", DEFAULT_SWITCH_COOLDOWN_TURNS, 0),
     cacheTtlMs: envInt(env, "JEV_CODEX_CACHE_TTL_MS", DEFAULT_CACHE_TTL_MS, 1),
     contextWindowTokens: envInt(env, "JEV_CODEX_CONTEXT_WINDOW", DEFAULT_CONTEXT_WINDOW, 1),
+    prices: parsePriceTable(envString(env, "JEV_CODEX_PRICES")),
+    assumedRemainingTurns: envInt(env, "JEV_CODEX_ASSUMED_REMAINING_TURNS", DEFAULT_ASSUMED_REMAINING_TURNS, 1),
+    taskTurnBudget: envInt(env, "JEV_CODEX_TASK_TURN_BUDGET", 0, 0),
+    lockBeforeEndTurns: envInt(env, "JEV_CODEX_LOCK_BEFORE_END_TURNS", DEFAULT_LOCK_BEFORE_END_TURNS, 0),
+    outputTokensPerTurn: envInt(env, "JEV_CODEX_OUTPUT_TOKENS_PER_TURN", DEFAULT_OUTPUT_TOKENS_PER_TURN, 0),
+    upgradeMode: (envString(env, "JEV_CODEX_UPGRADE_MODE") === "always" ? "always" : "triggered") as UpgradeMode,
+    upgradeComplexityThreshold: Math.min(
+      1,
+      Math.max(0, envNumber(env, "JEV_CODEX_UPGRADE_COMPLEXITY_THRESHOLD", DEFAULT_UPGRADE_COMPLEXITY_THRESHOLD)),
+    ),
+    upgradeFailureTtlMs: envInt(env, "JEV_CODEX_UPGRADE_FAILURE_TTL_MS", DEFAULT_UPGRADE_FAILURE_TTL_MS, 1),
+    stripEncryptedReasoning: envFlag(env, "JEV_CODEX_STRIP_ENCRYPTED_REASONING", false),
+    sessionTtlMs: envInt(env, "JEV_CODEX_SESSION_TTL_MS", DEFAULT_SESSION_TTL_MS, 1),
+    sessionFile: envString(env, "JEV_CODEX_SESSION_FILE"),
     jevModel: envString(env, "JEV_MODEL") ?? DEFAULT_JEV_MODEL,
     jevEndpoint: envString(env, "JEV_ENDPOINT") ?? DEFAULT_JEV_ENDPOINT,
     jevTimeoutMs: envInt(env, "JEV_CODEX_JEV_TIMEOUT_MS", 1_500, 1),

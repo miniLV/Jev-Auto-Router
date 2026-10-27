@@ -2,20 +2,32 @@ import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Serv
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { randomUUID } from "node:crypto";
-import type { Readable } from "node:stream";
 import {
   availableTiers,
   candidatesFromCatalog,
   candidateForModel,
   mergeCatalogModels,
   modelForTier,
+  rankOf,
   tierForModel,
 } from "./config.js";
+import { effectiveTurnLock, evaluateDowngrade, remainingTurns } from "./cache.js";
 import { askJev } from "./jev.js";
 import { createDecisionLog, type DecisionLog } from "./log.js";
 import { decide, detectOverride, shouldUseExactModel } from "./policy.js";
-import { conversationKey, estimateContextTokens, freshTurnPrompt, hashPrompt, promptChars, type ResponsesBody } from "./turn.js";
-import type { JevResult, ModelCandidate, RouteInput, RouterConfig, Tier } from "./types.js";
+import {
+  conversationKey,
+  estimateContextTokens,
+  freshTurnPrompt,
+  hasCompaction,
+  hashPrompt,
+  promptChars,
+  stripForeignReasoning,
+  type ResponsesBody,
+} from "./turn.js";
+import { attachUsageObserver, UsageScanner } from "./usage.js";
+import { NoopSessionStore, type SessionStore } from "./session-store.js";
+import type { JevResult, ModelCandidate, RouteInput, RouterConfig, SessionState, Tier } from "./types.js";
 import { AUTO_MODEL } from "./types.js";
 
 export type RouteFn = (input: RouteInput) => Promise<JevResult>;
@@ -24,6 +36,7 @@ export interface ProxyOptions {
   config: RouterConfig;
   route?: RouteFn;
   log?: DecisionLog;
+  store?: SessionStore;
   port?: number;
   now?: () => number;
 }
@@ -34,17 +47,6 @@ export interface RunningProxy {
   close(): Promise<void>;
 }
 
-interface SessionState {
-  tier: Tier;
-  model: string;
-  updatedAt: number;
-  turns: number;
-  switches: number;
-  turnsSinceSwitch: number;
-  lastPromptHash?: string;
-  lastContextTokens?: number;
-}
-
 /** Automatic switching stops once the session has used its stability budget. */
 function switchGuard(
   turns: number,
@@ -52,7 +54,8 @@ function switchGuard(
   turnsSinceSwitch: number,
   config: RouterConfig,
 ): string | undefined {
-  if (config.lockAfterTurns > 0 && turns > config.lockAfterTurns) return "session-lock";
+  const lock = effectiveTurnLock(config);
+  if (lock > 0 && turns > lock) return "session-lock";
   if (config.maxSwitchesPerSession > 0 && switches >= config.maxSwitchesPerSession) return "switch-budget";
   if (config.switchCooldownTurns > 0 && switches > 0 && turnsSinceSwitch < config.switchCooldownTurns) {
     return "switch-cooldown";
@@ -232,6 +235,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
   const { config } = options;
   const clock = options.now ?? Date.now;
   const log = options.log ?? createDecisionLog(config.logFile);
+  const store = options.store ?? new NoopSessionStore();
   const route: RouteFn = options.route ?? ((input) => askJev({
     config,
     candidates: input.candidates,
@@ -243,11 +247,21 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
   const catalog = new Map<string, ModelCandidate>();
   let candidates: ModelCandidate[] = candidatesFromCatalog(undefined, config.tiers, config.allowLong);
 
-  function remember<T>(map: Map<string, T>, key: string, value: T): void {
-    map.set(key, value);
-    if (map.size <= MAX_SESSIONS) return;
-    const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
+  for (const [key, state] of Object.entries(await store.load())) {
+    if (clock() - state.updatedAt <= config.sessionTtlMs) sessions.set(key, state);
+  }
+
+  function persist(): void {
+    store.save(Object.fromEntries(sessions));
+  }
+
+  function remember(key: string, value: SessionState): void {
+    sessions.set(key, value);
+    if (sessions.size > MAX_SESSIONS) {
+      const oldest = sessions.keys().next().value;
+      if (oldest !== undefined) sessions.delete(oldest);
+    }
+    persist();
   }
 
   function requestCandidates(): ModelCandidate[] {
@@ -339,18 +353,30 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
     }
 
     let summary: RoutingSummary | undefined;
+    let sessionKey: string | undefined;
+    let switchedModel = false;
     if (parsed.model === AUTO_MODEL) {
       const available = requestCandidates();
       const key = conversationKey(parsed);
+      sessionKey = key;
       const state = sessions.get(key);
+      const now = clock();
       const currentModel = state?.model ?? config.defaultModel;
       const currentTier = tierForModel(currentModel, config.tiers) ?? state?.tier ?? "strong";
       const prompt = freshTurnPrompt(parsed);
       let model = currentModel;
       let tier = currentTier;
 
+      if (state && hasCompaction(parsed.input)) {
+        // A compaction replaces the prefix; the old cache evidence is no longer
+        // valid and the cooldown should not block a fresh evaluation.
+        state.cache = { inputTokens: 0, cachedTokens: 0, cacheWriteTokens: 0, outputTokens: 0, at: now, warm: false };
+        state.turnsSinceSwitch = config.switchCooldownTurns;
+        state.lastPromptHash = undefined;
+        persist();
+      }
+
       if (prompt) {
-        const now = clock();
         const contextTokens = estimateContextTokens(parsed.input);
         const promptHash = hashPrompt(prompt);
         const sameDecision = state?.lastPromptHash === promptHash && state.lastContextTokens === contextTokens;
@@ -359,6 +385,9 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
         const turns = (expired ? 0 : state?.turns ?? 0) + 1;
         const switches = expired ? 0 : state?.switches ?? 0;
         const turnsSinceSwitch = expired ? 0 : state?.turnsSinceSwitch ?? 0;
+        const cacheWarm = state?.cache && now - state.cache.at <= config.cacheTtlMs
+          ? state.cache.warm
+          : undefined;
         const override = detectOverride(prompt, config.tiers);
         const guard = override ? undefined : switchGuard(turns, switches, turnsSinceSwitch, config);
 
@@ -372,7 +401,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
           // an oscillation. Explicit user overrides bypass this guard.
           tier = currentTier;
           model = currentModel;
-          remember(sessions, key, {
+          remember(key, {
             tier,
             model,
             updatedAt: now,
@@ -381,6 +410,8 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             turnsSinceSwitch: turnsSinceSwitch + 1,
             lastPromptHash: promptHash,
             lastContextTokens: contextTokens,
+            cache: state?.cache,
+            lastFailureAt: state?.lastFailureAt,
           });
           log.write({
             at: new Date(now).toISOString(),
@@ -400,6 +431,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             session_turns: turns,
             session_switches: switches,
             turns_since_switch: turnsSinceSwitch + 1,
+            cache_warm: cacheWarm ?? null,
           });
           if (config.debug) {
             process.stderr.write(
@@ -418,6 +450,24 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             ? available.find((candidate) => candidate.id === result.answer?.choice)
             : undefined;
           const choiceTier = chosen?.tier;
+          const failureRecent = state?.lastFailureAt !== undefined && now - state.lastFailureAt <= config.upgradeFailureTtlMs;
+          const scores = result.answer?.scores;
+          const highComplexity = Boolean(scores && (
+            scores.reasoningRequired >= config.upgradeComplexityThreshold ||
+            scores.taskComplexity >= config.upgradeComplexityThreshold
+          ));
+          const allowUpgrade = config.upgradeMode === "always" || failureRecent || highComplexity;
+          const downgrade = chosen && choiceTier && rankOf(choiceTier) < rankOf(currentTier)
+            ? evaluateDowngrade({
+                prefixTokens: contextTokens,
+                currentModel,
+                targetModel: chosen.id,
+                prices: config.prices,
+                cacheWarm,
+                remainingTurns: remainingTurns(config, turns),
+                outputTokensPerTurn: config.outputTokensPerTurn,
+              })
+            : undefined;
           const decision = decide({
             prompt,
             jev: choiceTier && result.answer
@@ -426,6 +476,8 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             current: currentTier,
             available: availableTiers(available),
             contextTokens,
+            allowUpgrade,
+            downgrade,
             config,
           });
           tier = decision.tier;
@@ -434,10 +486,10 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             : tier === currentTier
               ? currentModel
               : modelForTier(available, tier) ?? currentModel;
-          const switched = model !== currentModel;
-          const nextSwitches = switches + (switched ? 1 : 0);
-          const nextTurnsSinceSwitch = switched ? 0 : turnsSinceSwitch + 1;
-          remember(sessions, key, {
+          switchedModel = model !== currentModel;
+          const nextSwitches = switches + (switchedModel ? 1 : 0);
+          const nextTurnsSinceSwitch = switchedModel ? 0 : turnsSinceSwitch + 1;
+          remember(key, {
             tier,
             model,
             updatedAt: now,
@@ -446,13 +498,15 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             turnsSinceSwitch: nextTurnsSinceSwitch,
             lastPromptHash: promptHash,
             lastContextTokens: contextTokens,
+            cache: state?.cache,
+            lastFailureAt: state?.lastFailureAt,
           });
           summary = {
             tier,
             model,
             confidence: result.answer?.confidence ?? null,
             reason: decision.reason,
-            changed: decision.changed || switched,
+            changed: decision.changed || switchedModel,
           };
           log.write({
             at: new Date(now).toISOString(),
@@ -473,6 +527,11 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             session_turns: turns,
             session_switches: nextSwitches,
             turns_since_switch: nextTurnsSinceSwitch,
+            cache_warm: cacheWarm ?? null,
+            downgrade_allowed: downgrade?.allowed ?? null,
+            downgrade_reason: downgrade?.reason,
+            break_even_turns: downgrade?.breakEvenTurns ?? null,
+            upgrade_allowed: allowUpgrade,
           });
           if (config.debug) {
             process.stderr.write(
@@ -483,11 +542,28 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
       }
 
       withCatalogModel(parsed, model, candidateForModel(available, model));
+      if (config.stripEncryptedReasoning) stripForeignReasoning(parsed);
       const upstream = await requestUpstream(req, Buffer.from(JSON.stringify(parsed)), config);
       const status = upstream.statusCode ?? 500;
       const contentType = String(upstream.headers["content-type"] ?? "").toLowerCase();
       const encoded = Boolean(upstream.headers["content-encoding"] && upstream.headers["content-encoding"] !== "identity");
       const maybeSse = contentType.includes("text/event-stream") || contentType === "";
+      if (sessionKey) {
+        const activeKey = sessionKey;
+        attachUsageObserver(upstream, new UsageScanner((usage) => {
+          const current = sessions.get(activeKey);
+          if (!current) return;
+          current.cache = usage;
+          persist();
+        }, clock));
+      }
+      if (sessionKey && status >= 400) {
+        const failed = sessions.get(sessionKey);
+        if (failed) {
+          failed.lastFailureAt = clock();
+          persist();
+        }
+      }
       if (summary && config.commentary && status >= 200 && status < 300 && maybeSse && !encoded) {
         streamWithCommentary(upstream, res, summary);
       } else {
