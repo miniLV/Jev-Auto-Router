@@ -1,5 +1,5 @@
 /** The virtual model Codex selects to opt into turn-level routing. */
-export const AUTO_MODEL = "jev-router";
+export const AUTO_MODEL = "jev-auto";
 
 /** Capability tiers. The names are policy labels; concrete model IDs are configuration. */
 export const TIERS = ["fast", "balanced", "strong", "long"] as const;

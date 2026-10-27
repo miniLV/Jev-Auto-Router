@@ -2,7 +2,7 @@
 
 [中文](README.md) | **[English](README.en.md)**
 
-**One model decision per Codex user turn.** `jev-codex` launches the real Codex CLI, adds a virtual `jev-router` model to the picker, asks [TypeSafe Jev](https://docs.typesafe.ai/introduction) once per fresh user turn, and keeps the selected model pinned through the entire tool loop.
+**One model decision per Codex user turn.** `jev-codex` launches the real Codex CLI, adds a virtual `jev-auto` model to the picker, asks [TypeSafe Jev](https://docs.typesafe.ai/introduction) once per fresh user turn, and keeps the selected model pinned through the entire tool loop.
 
 This is the first **turn-pinned Codex router**. It prioritizes a working loop, fewer switches, and cache-friendly behavior. The old per-call path is gone from the main entrypoint.
 
@@ -46,17 +46,17 @@ jev-codex
 `jev-codex` does not fork Codex. It launches the real Codex CLI, injects a temporary provider, and (by default) adds one virtual model to the Codex CLI model picker / `/model`:
 
 ```text
-jev-router      Jev Router
+jev-auto      Jev Auto Router
 gpt-6-sol
 gpt-6.1-sol
 ...
 ```
 
-Selecting `jev-router` enables routing; selecting a real model bypasses it. This is the most visible integration result: **one extra model-list entry, not a separate agent.**
+Selecting `jev-auto` enables routing; selecting a real model bypasses it. This is the most visible integration result: **one extra model-list entry, not a separate agent.**
 
 Notes:
 
-- `JEV_API_KEY` / `TYPESAFE_API_KEY` is required. Without a key, `jev-codex` launches Codex without routing, and `jev-router` will not appear.
+- `JEV_API_KEY` / `TYPESAFE_API_KEY` is required. Without a key, `jev-codex` launches Codex without routing, and `jev-auto` will not appear.
 - This version covers **Codex CLI** only. The Codex app is not wired to this wrapper yet; if the app supports a custom provider, it could point to the local proxy, but that is untested and undocumented.
 - The actual list depends on your account catalog; the model names above are illustrative.
 
@@ -135,7 +135,7 @@ You send a message
   -> the next user turn may decide again
 ```
 
-Selecting a concrete model in the picker bypasses automatic routing and passes the request through unchanged. Select `jev-router` to resume routing.
+Selecting a concrete model in the picker bypasses automatic routing and passes the request through unchanged. Select `jev-auto` to resume routing.
 
 ## Policy
 

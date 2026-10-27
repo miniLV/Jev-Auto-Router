@@ -12,8 +12,9 @@ const PROVIDER = "jev";
 export function loadEnvFiles(): void {
   for (const file of [
     join(process.cwd(), ".env"),
-    join(homedir(), ".jev-router.env"),
     join(homedir(), ".jev-codex.env"),
+    join(homedir(), ".jev-router.env"), // legacy
+    join(homedir(), ".jev-auto-router.env"),
   ]) {
     try {
       process.loadEnvFile(file);
@@ -62,7 +63,7 @@ export function buildCodexArgs(baseURL: string, args: readonly string[]): string
   return [
     ...prefix,
     "--config", `model_provider="${PROVIDER}"`,
-    "--config", `model_providers.${PROVIDER}.name="Jev Router"`,
+    "--config", `model_providers.${PROVIDER}.name="Jev Auto Router"`,
     "--config", `model_providers.${PROVIDER}.base_url="${baseURL}"`,
     "--config", `model_providers.${PROVIDER}.wire_api="responses"`,
     "--config", `model_providers.${PROVIDER}.requires_openai_auth=true`,
@@ -94,7 +95,7 @@ export async function runCodex(): Promise<void> {
   } else {
     process.stderr.write(
       "[jev] no JEV_API_KEY or TYPESAFE_API_KEY found; starting Codex without routing.\n" +
-        `[jev] add JEV_API_KEY=... to ${join(homedir(), ".jev-router.env")} and restart jev-codex.\n`,
+        `[jev] add JEV_API_KEY=... to ${join(homedir(), ".jev-auto-router.env")} and restart jev-codex.\n`,
     );
   }
 

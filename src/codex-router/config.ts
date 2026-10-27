@@ -153,7 +153,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     jevMaxRetries: envInt(env, "JEV_CODEX_JEV_MAX_RETRIES", 1),
     apiKey: envString(env, "JEV_API_KEY") ?? envString(env, "TYPESAFE_API_KEY"),
     defaultModel: envString(env, "JEV_CODEX_DEFAULT_MODEL") ?? tiers.strong,
-    autoModelDisplayName: envString(env, "JEV_CODEX_MODEL_LABEL") ?? "Jev Router",
+    autoModelDisplayName: envString(env, "JEV_CODEX_MODEL_LABEL") ?? "Jev Auto Router",
     chatgptBaseUrl: envString(env, "JEV_CODEX_CHATGPT_BASE_URL") ?? DEFAULT_CHATGPT_BASE_URL,
     apiBaseUrl: envString(env, "JEV_CODEX_API_BASE_URL") ?? DEFAULT_API_BASE_URL,
     commentary: envFlag(env, "JEV_CODEX_COMMENTARY", true),

@@ -326,7 +326,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
                     ...template,
                     slug: AUTO_MODEL,
                     display_name: config.autoModelDisplayName,
-                    description: "Jev picks the cheapest model that can complete each turn.",
+                    description: "Jev picks model + effort once per turn; the model stays pinned through the tool loop.",
                     visibility: "list",
                     supported_in_api: true,
                     priority: 0,
@@ -335,7 +335,7 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
                 : {
                     slug: AUTO_MODEL,
                     display_name: config.autoModelDisplayName,
-                    description: "Jev picks the cheapest model that can complete each turn.",
+                    description: "Jev picks model + effort once per turn; the model stays pinned through the tool loop.",
                     visibility: "list",
                     supported_in_api: true,
                     priority: 0,

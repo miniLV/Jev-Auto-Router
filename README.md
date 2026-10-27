@@ -2,7 +2,7 @@
 
 **[中文](README.md)** | [English](README.en.md)
 
-**Codex 一轮对话，一次模型选择。** `jev-codex` 启动真实的 Codex CLI，在模型选择器里加入虚拟模型 `jev-router`；每个新 user turn 问一次 [TypeSafe Jev](https://docs.typesafe.ai/introduction)，然后把选中的模型固定到这一轮的整个 tool loop。
+**Codex 一轮对话，一次模型选择。** `jev-codex` 启动真实的 Codex CLI，在模型选择器里加入虚拟模型 `jev-auto`；每个新 user turn 问一次 [TypeSafe Jev](https://docs.typesafe.ai/introduction)，然后把选中的模型固定到这一轮的整个 tool loop。
 
 这是 **turn-pinned Codex router** 的第一版。它优先保证能跑、切换少、缓存友好；旧逐调用路径已经从主入口移除。
 
@@ -41,22 +41,22 @@ npm link
 jev-codex
 ```
 
-## 结果：model list 里多一个 `jev-router`
+## 结果：model list 里多一个 `jev-auto`
 
 `jev-codex` 不需要 fork Codex。它启动真实的 Codex CLI，注入一个临时 provider；默认启动时，在 Codex CLI 的 model picker / `/model` 里会多出一个虚拟模型：
 
 ```text
-jev-router      Jev Router
+jev-auto      Jev Auto Router
 gpt-6-sol
 gpt-6.1-sol
 ...
 ```
 
-选中 `jev-router` 才会自动路由；直接选真实模型会绕过路由。这是这个项目最直观的集成结果：**model list 里多一个 entry，而不是一套新的 agent。**
+选中 `jev-auto` 才会自动路由；直接选真实模型会绕过路由。这是这个项目最直观的集成结果：**model list 里多一个 entry，而不是一套新的 agent。**
 
 注意：
 
-- 需要 `JEV_API_KEY` / `TYPESAFE_API_KEY`。没有 key 时 `jev-codex` 会启动 Codex 但不启用路由，model list 里不会出现 `jev-router`。
+- 需要 `JEV_API_KEY` / `TYPESAFE_API_KEY`。没有 key 时 `jev-codex` 会启动 Codex 但不启用路由，model list 里不会出现 `jev-auto`。
 - 当前只覆盖 **Codex CLI**。Codex app 还没有接入这个 wrapper；如果 app 支持自定义 provider，理论上可以指向本地代理，但未验证、未文档化。
 - 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
 
@@ -135,7 +135,7 @@ jev-codex exec "fix the failing test"
   -> 下一个 user turn 再判断
 ```
 
-用户显式选择具体模型时，请求原样透传，暂停自动路由；重新选择 `jev-router` 恢复。
+用户显式选择具体模型时，请求原样透传，暂停自动路由；重新选择 `jev-auto` 恢复。
 
 ## 政策
 

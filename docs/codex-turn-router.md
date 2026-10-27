@@ -1,7 +1,7 @@
 # Codex turn router
 
 The primary runtime is a small Codex wrapper. It starts the real Codex CLI with
-a temporary provider, adds a virtual `jev-router` model to the picker, and asks
+a temporary provider, adds a virtual `jev-auto` model to the picker, and asks
 Jev once at the start of each user turn. The chosen model is pinned for the
 whole tool loop.
 
@@ -48,7 +48,7 @@ starts Codex without routing.
 
 ## What happens on a request
 
-1. Codex sends `POST /responses` with `model = jev-router`.
+1. Codex sends `POST /responses` with `model = jev-auto`.
 2. The wrapper reads the current user prompt. A tool result after the last user
    message is a continuation, so it reuses the pinned model.
 3. On a fresh turn, it sends Jev the prompt, current model, approximate context

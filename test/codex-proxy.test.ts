@@ -80,7 +80,7 @@ function config(baseUrl: string, overrides: Partial<RouterConfig> = {}): RouterC
     jevMaxRetries: 0,
     apiKey: "test",
     defaultModel: "gpt-6-sol",
-    autoModelDisplayName: "Jev Router",
+    autoModelDisplayName: "Jev Auto Router",
     chatgptBaseUrl: baseUrl,
     apiBaseUrl: baseUrl,
     commentary: false,
@@ -136,11 +136,11 @@ test("proxy injects the virtual model and pins one model across a tool loop", as
   try {
     const models = await fetch(`http://127.0.0.1:${proxy.port}/models`);
     const catalog = (await models.json()) as { models: Array<{ slug: string }> };
-    assert.equal(catalog.models.some((model) => model.slug === "jev-router"), true);
+    assert.equal(catalog.models.some((model) => model.slug === "jev-auto"), true);
 
     const first = await post(
       `http://127.0.0.1:${proxy.port}`,
-      postBody("jev-router", "fix the failing test"),
+      postBody("jev-auto", "fix the failing test"),
     );
     assert.equal(first.status, 200);
     await first.text();
@@ -150,7 +150,7 @@ test("proxy injects the virtual model and pins one model across a tool loop", as
 
     const continuation = await post(
       `http://127.0.0.1:${proxy.port}`,
-      postBody("jev-router", "fix the failing test", [
+      postBody("jev-auto", "fix the failing test", [
         { type: "function_call", call_id: "call_1" },
         { type: "function_call_output", call_id: "call_1", output: "failed" },
       ]),
@@ -163,7 +163,7 @@ test("proxy injects the virtual model and pins one model across a tool loop", as
 
     const nextTurn = await post(
       `http://127.0.0.1:${proxy.port}`,
-      postBody("jev-router", "now design the fix"),
+      postBody("jev-auto", "now design the fix"),
     );
     assert.equal(nextTurn.status, 200);
     await nextTurn.text();
@@ -189,7 +189,7 @@ test("an identical retry reuses the turn decision", async () => {
     log: new NoopDecisionLog(),
   });
   try {
-    const body = postBody("jev-router", "fix the failing test");
+    const body = postBody("jev-auto", "fix the failing test");
     const first = await post(`http://127.0.0.1:${proxy.port}`, body);
     await first.text();
     const second = await post(`http://127.0.0.1:${proxy.port}`, body);
@@ -220,7 +220,7 @@ test("switch cooldown keeps the pinned model for one turn after a change", async
   });
   try {
     for (const prompt of ["first", "cooldown", "after cooldown"]) {
-      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", prompt));
+      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", prompt));
       await response.text();
     }
     assert.equal(calls, 2);
@@ -253,7 +253,7 @@ test("session lock stops automatic switching after the configured turn count", a
   });
   try {
     for (const prompt of ["one", "two", "three"]) {
-      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", prompt));
+      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", prompt));
       await response.text();
     }
     assert.equal(calls, 2);
@@ -279,7 +279,7 @@ test("switch budget stops further automatic changes", async () => {
   });
   try {
     for (const prompt of ["one", "two"]) {
-      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", prompt));
+      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", prompt));
       await response.text();
     }
     assert.equal(calls, 1);
@@ -313,10 +313,10 @@ test("an expired cache TTL resets the session switch guards", async () => {
     log: new NoopDecisionLog(),
   });
   try {
-    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "one"));
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "one"));
     await first.text();
     now += 2_000;
-    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "two"));
+    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "two"));
     await second.text();
     assert.equal(calls, 2);
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
@@ -340,9 +340,9 @@ test("an explicit user override still works after the session lock", async () =>
     log: new NoopDecisionLog(),
   });
   try {
-    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "one"));
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "one"));
     await first.text();
-    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "use luna for this one"));
+    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "use luna for this one"));
     await second.text();
     assert.equal(calls, 2);
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
@@ -371,7 +371,7 @@ test("price break-even blocks a downgrade when the remaining turns are too few",
     log: new NoopDecisionLog(),
   });
   try {
-    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "x".repeat(100_000)));
+    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "x".repeat(100_000)));
     await response.text();
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
     assert.equal(forwarded.model, "gpt-6-sol");
@@ -409,9 +409,9 @@ test("cold observed cache lets a large-context downgrade pass", async () => {
     store,
   });
   try {
-    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "keep the strong model"));
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "keep the strong model"));
     await first.text();
-    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "x".repeat(100_000)));
+    const second = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "x".repeat(100_000)));
     await second.text();
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
     assert.equal(forwarded.model, "gpt-6-luna");
@@ -448,7 +448,7 @@ test("triggered upgrades require a failure or a high-complexity signal", async (
   });
   try {
     for (const prompt of ["first", "low", "high"]) {
-      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", prompt));
+      const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", prompt));
       await response.text();
     }
     assert.equal(calls, 3);
@@ -487,7 +487,7 @@ test("loads a persisted session pin before routing", async () => {
     store,
   });
   try {
-    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "continue"));
+    const response = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "continue"));
     await response.text();
     assert.equal(calls, 0);
     const forwarded = JSON.parse(records.at(-1)!.body) as { model: string };
@@ -519,10 +519,10 @@ test("a compaction resets cache warmth before the next decision", async () => {
     log: new NoopDecisionLog(),
   });
   try {
-    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-router", "first"));
+    const first = await post(`http://127.0.0.1:${proxy.port}`, postBody("jev-auto", "first"));
     await first.text();
     const compacted = JSON.stringify({
-      model: "jev-router",
+      model: "jev-auto",
       prompt_cache_key: "session-1",
       stream: true,
       tools: [{ type: "function", name: "exec_command", parameters: { type: "object" } }],
@@ -571,7 +571,7 @@ test("effort updates keep the top-level effort and reinsert earlier updates", as
     await fetch(`http://127.0.0.1:${proxy.port}/models`).then((response) => response.text());
     const tools = [{ type: "function", name: "exec_command", parameters: { type: "object" } }];
     const first = JSON.stringify({
-      model: "jev-router",
+      model: "jev-auto",
       prompt_cache_key: "effort-session",
       stream: true,
       reasoning: { effort: "medium" },
@@ -585,7 +585,7 @@ test("effort updates keep the top-level effort and reinsert earlier updates", as
     assert.equal((firstBody.input[0].reasoning as { effort: string }).effort, "high");
 
     const continuation = JSON.stringify({
-      model: "jev-router",
+      model: "jev-auto",
       prompt_cache_key: "effort-session",
       stream: true,
       reasoning: { effort: "medium" },
@@ -602,7 +602,7 @@ test("effort updates keep the top-level effort and reinsert earlier updates", as
     assert.equal(continuationBody.input[0].type, "configuration_update");
 
     const second = JSON.stringify({
-      model: "jev-router",
+      model: "jev-auto",
       prompt_cache_key: "effort-session",
       stream: true,
       reasoning: { effort: "medium" },
