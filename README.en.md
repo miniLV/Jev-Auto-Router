@@ -60,6 +60,10 @@ Notes:
 - This version covers **Codex CLI** only. The Codex app is not wired to this wrapper yet; if the app supports a custom provider, it could point to the local proxy, but that is untested and undocumented.
 - The actual list depends on your account catalog; the model names above are illustrative.
 
+![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
+
+The real Codex model picker: `Jev Auto Router` is the virtual entry; real models remain directly selectable.
+
 ## Why turn-pinned, not every model call
 
 ```text

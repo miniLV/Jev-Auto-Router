@@ -60,6 +60,10 @@ gpt-6.1-sol
 - 当前只覆盖 **Codex CLI**。Codex app 还没有接入这个 wrapper；如果 app 支持自定义 provider，理论上可以指向本地代理，但未验证、未文档化。
 - 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
 
+![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
+
+真实 Codex model picker：`Jev Auto Router` 是虚拟 entry；下面的真实模型仍然可以直接选择。
+
 ## 为什么是 turn，而不是每次 model call
 
 ```text
