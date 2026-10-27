@@ -1,6 +1,6 @@
 # Jev Auto Router
 
-**中文** | [English](README.en.md)
+[中文](README.md) | **English**
 
 **Codex 一轮对话，一次模型选择。** `jev-codex` 启动真实的 Codex CLI，在模型选择器里加入虚拟模型 `jev-router`；每个新 user turn 问一次 [TypeSafe Jev](https://docs.typesafe.ai/introduction)，然后把选中的模型固定到这一轮的整个 tool loop。
 
