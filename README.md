@@ -1,6 +1,6 @@
 # Jev Auto Router
 
-[中文](README.md) | **English**
+**[中文](README.md)** | [English](README.en.md)
 
 **Codex 一轮对话，一次模型选择。** `jev-codex` 启动真实的 Codex CLI，在模型选择器里加入虚拟模型 `jev-router`；每个新 user turn 问一次 [TypeSafe Jev](https://docs.typesafe.ai/introduction)，然后把选中的模型固定到这一轮的整个 tool loop。
 
@@ -59,6 +59,18 @@ Session
 每次切模型都会让新模型重建 prompt prefix。把决策放在 turn 开头、把模型固定在 tool loop 内，能把切换成本压到“每个 user turn 最多一次”，也避免模型在任务中途反复变化。
 
 模型固定之后，effort 可以独立调整：用 `configuration_update` 改变思考档位，保持 request-level effort 不变，并把历史 update 原地重放。当前实现是 **per-turn effort**，不是 per-step；这样不需要额外的逐调用分类器，也不会为了 effort 切模型。
+
+## 价值：先降 effort，再降 model
+
+同一个 5-turn 任务，三种花法：
+
+- **A**：永远 frontier + high，最贵；
+- **B**：每次调用换 model，省单价，但多出一块 prefix 重建；
+- **C**：模型固定、按 turn 调 effort，cache 保留，routine turn 少烧 reasoning。
+
+![同一个 5-turn 任务，三种花法](docs/assets/codex-turn-router-tradeoffs.png)
+
+这是示意，不是实测账单。真实收益取决于 cache 命中率、output/reasoning 占比和质量。它解释了这个项目最核心的取舍：**effort 是第一杠杆，模型切换要等 break-even。**
 
 > [!WARNING]
 > Alpha：effort routing 默认关闭，且 `configuration_update` 的实机 cache 行为还没有在真实 Codex + GPT 会话中验证。先设 `JEV_CODEX_EFFORT_ROUTING=turn` 做一次小任务 smoke，再长期开启。

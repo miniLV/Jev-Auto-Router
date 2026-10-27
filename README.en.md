@@ -1,6 +1,6 @@
 # Jev Auto Router
 
-[中文](README.md) | **English**
+[中文](README.md) | **[English](README.en.md)**
 
 **One model decision per Codex user turn.** `jev-codex` launches the real Codex CLI, adds a virtual `jev-router` model to the picker, asks [TypeSafe Jev](https://docs.typesafe.ai/introduction) once per fresh user turn, and keeps the selected model pinned through the entire tool loop.
 
@@ -59,6 +59,18 @@ Session
 Every model switch forces the new model to rebuild the prompt prefix. Deciding at the start of a turn and keeping the model fixed inside the tool loop limits rebuilds to at most one per user turn and avoids model oscillation mid-task.
 
 Once the model is fixed, effort can move independently: use `configuration_update` to change the reasoning level, keep the request-level effort at its baseline, and replay earlier updates in place. The current implementation is **per-turn effort**, not per-step. That avoids an extra per-call classifier and never switches models just to change effort.
+
+## Value: lower effort first, then model
+
+Same 5-turn task, three ways to spend:
+
+- **A**: always frontier + high — most expensive;
+- **B**: switch model every call — saves rate, but adds a prefix rebuild;
+- **C**: pin the model and move effort per turn — keeps the cache, less reasoning on routine turns.
+
+![Same 5-turn task, three ways to spend](docs/assets/codex-turn-router-tradeoffs-en.png)
+
+Illustrative, not a measured bill. Real savings depend on the cache hit rate, the output/reasoning share, and quality. This is the project's main bet: **effort is the first lever; a model switch has to clear break-even.**
 
 > [!WARNING]
 > Alpha: effort routing is off by default, and `configuration_update` has not been validated against a live Codex + GPT cache yet. Set `JEV_CODEX_EFFORT_ROUTING=turn` for a small smoke test before enabling it long-term.
