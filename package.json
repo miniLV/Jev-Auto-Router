@@ -12,7 +12,8 @@
     "codex": "npm run build && node bin/jev-codex.mjs",
     "codex:proxy": "npm run build && node dist/src/codex-router/server.js",
     "prepare": "npm run build",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "publish:alpha": "npm run build && npm publish --tag alpha"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
@@ -50,6 +51,7 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "alpha"
   }
 }
