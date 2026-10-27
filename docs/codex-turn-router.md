@@ -224,6 +224,11 @@ size, cache warmth, break-even evidence and Jev scores.
   not required by this path.
 - The implementation is Codex only. Claude Code support is a later adapter.
 
+## Evaluation
+
+The paired-task plan, sample matrix, cost accounting and pass criteria are in
+[evaluation-plan.md](evaluation-plan.md).
+
 ## Known gaps
 
 - The context size is estimated from the serialized input, not tokenized; it

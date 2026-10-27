@@ -9,6 +9,7 @@
 ![Codex Turn Router 优化控制面](docs/assets/codex-turn-router-control-plane.png)
 
 - 使用、配置与设计取舍：[docs/codex-turn-router.md](docs/codex-turn-router.md)
+- 测试样本与方法：[docs/evaluation-plan.md](docs/evaluation-plan.md)
 
 ## 为什么是 turn，而不是每次 model call
 
