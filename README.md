@@ -8,7 +8,7 @@
 
 ![Codex Turn Router 控制回路](docs/assets/codex-turn-router-control-plane.png)
 
-控制回路：选 → 跑 → 学。
+控制回路：选 → 闸 → 跑 → 学。
 
 - 使用、配置与设计取舍：[docs/codex-turn-router.md](docs/codex-turn-router.md)
 - 测试样本与方法：[docs/evaluation-plan.md](docs/evaluation-plan.md)

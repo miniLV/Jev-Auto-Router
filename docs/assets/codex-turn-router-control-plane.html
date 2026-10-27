@@ -9,19 +9,16 @@
       --paper: #f8f5ec;
       --ink: #252a31;
       --muted: #6d675d;
-      --grid: rgba(37, 42, 49, .055);
+      --grid: rgba(37,42,49,.055);
       --orange: #d76838;
       --orange-soft: #ffe3ce;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff0b8;
       --green: #3f8f52;
       --green-soft: #dff1d4;
       --teal: #20898d;
       --teal-soft: #d6f1ee;
       --blue: #3867d6;
-      --blue-soft: #dfe9ff;
-      --pink: #d35f84;
-      --pink-soft: #ffe0eb;
-      --yellow: #d1a52b;
-      --yellow-soft: #fff0b8;
     }
     * { box-sizing: border-box; }
     body {
@@ -34,118 +31,50 @@
       background-size: 34px 34px;
       font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
     }
-    .page {
-      position: relative;
-      width: 1500px;
-      height: 900px;
-      overflow: hidden;
-      padding: 42px 50px;
-    }
-    .kicker {
-      color: var(--teal);
-      font: 900 14px "Avenir Next", "PingFang SC", sans-serif;
-      letter-spacing: .14em;
-    }
-    h1 {
-      margin: 7px 0 0;
-      font-size: 50px;
-      line-height: 1.05;
-    }
-    .subtitle {
-      margin: 12px 0 0;
-      width: 900px;
-      color: var(--muted);
-      font: 650 19px/1.4 "Avenir Next", "PingFang SC", sans-serif;
-    }
-    .stamp {
-      position: absolute;
-      top: 44px;
-      right: 50px;
-      width: 330px;
-      padding: 13px 17px;
-      border: 3px solid var(--pink);
-      border-radius: 20px 16px 22px 17px;
-      background: var(--pink-soft);
-      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
-      transform: rotate(1.5deg);
-      font: 800 14px/1.35 "Avenir Next", "PingFang SC", sans-serif;
-    }
-    .stamp b {
-      display: block;
-      margin-bottom: 3px;
-      color: var(--pink);
-      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
-      font-size: 20px;
-    }
+    .page { position: relative; width: 1500px; height: 900px; overflow: hidden; padding: 42px 50px; }
+    .kicker { color: var(--teal); font: 900 14px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
+    h1 { margin: 7px 0 0; font-size: 50px; line-height: 1.05; }
+    .subtitle { margin: 12px 0 0; color: var(--muted); font: 650 19px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
     .card {
       position: absolute;
       z-index: 3;
-      padding: 18px 22px;
+      width: 500px;
+      height: 160px;
+      padding: 17px 22px;
       border: 3.5px solid var(--stroke);
       border-radius: 24px 19px 26px 20px;
       background: var(--fill);
       box-shadow: 8px 9px 0 rgba(37,42,49,.11);
       transform: rotate(var(--tilt));
     }
-    .card .num {
-      display: block;
-      margin-bottom: 4px;
-      color: color-mix(in srgb, var(--stroke) 78%, var(--ink));
-      font: 900 14px "SFMono-Regular", Menlo, monospace;
-      letter-spacing: .1em;
-    }
-    .card h2 {
-      margin: 0 0 8px;
-      font-size: 30px;
-      line-height: 1;
-    }
-    .card p {
-      margin: 0;
-      color: #3e4242;
-      font: 650 16px/1.4 "Avenir Next", "PingFang SC", sans-serif;
-    }
+    .card h2 { margin: 0 0 8px; font-size: 28px; line-height: 1.05; }
+    .card p { margin: 0; color: #3e4242; font: 700 16px/1.35 "Avenir Next", "PingFang SC", sans-serif; }
     .card p + p { margin-top: 3px; }
-    .card code {
-      font: 700 14px "SFMono-Regular", Menlo, monospace;
-      background: rgba(255,255,255,.55);
-      padding: 1px 5px;
-      border-radius: 5px;
-    }
-    .pick { left: 155px; top: 205px; width: 480px; height: 158px; --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.6deg; }
-    .run { right: 155px; top: 205px; width: 480px; height: 158px; --stroke: var(--green); --fill: var(--green-soft); --tilt: .7deg; }
-    .learn { left: 490px; top: 600px; width: 520px; height: 158px; --stroke: var(--teal); --fill: var(--teal-soft); --tilt: -.4deg; }
+    .card code { font: 700 14px "SFMono-Regular", Menlo, monospace; background: rgba(255,255,255,.55); padding: 1px 5px; border-radius: 5px; }
+    .pick { left: 100px; top: 200px; --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.5deg; }
+    .gate { left: 900px; top: 200px; --stroke: var(--yellow); --fill: var(--yellow-soft); --tilt: .5deg; }
+    .run { left: 900px; top: 600px; --stroke: var(--green); --fill: var(--green-soft); --tilt: -.4deg; }
+    .learn { left: 100px; top: 600px; --stroke: var(--teal); --fill: var(--teal-soft); --tilt: .4deg; }
     .center {
       position: absolute;
-      left: 590px;
-      top: 410px;
-      width: 320px;
-      height: 128px;
+      left: 600px;
+      top: 405px;
+      width: 300px;
+      height: 120px;
       z-index: 2;
       display: grid;
       place-items: center;
       text-align: center;
-      padding: 15px 20px;
+      padding: 12px 18px;
       border: 3.5px solid var(--blue);
       border-radius: 26px 20px 28px 22px;
       background: rgba(255,252,243,.94);
       box-shadow: 8px 9px 0 rgba(37,42,49,.1);
       transform: rotate(-.5deg);
     }
-    .center .eyebrow {
-      color: var(--blue);
-      font: 900 12px "Avenir Next", "PingFang SC", sans-serif;
-      letter-spacing: .14em;
-    }
-    .center h2 {
-      margin: 4px 0 0;
-      font-size: 30px;
-      line-height: 1.05;
-    }
-    .center p {
-      margin: 5px 0 0;
-      color: var(--muted);
-      font: 700 14px "Avenir Next", "PingFang SC", sans-serif;
-    }
+    .center .eyebrow { color: var(--blue); font: 900 12px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
+    .center h2 { margin: 4px 0 0; font-size: 28px; line-height: 1.05; }
+    .center p { margin: 4px 0 0; color: var(--muted); font: 700 13px "Avenir Next", "PingFang SC", sans-serif; }
     .footer {
       position: absolute;
       left: 50px;
@@ -159,16 +88,6 @@
       font: 800 15px/1.35 "Avenir Next", "PingFang SC", sans-serif;
     }
     .footer b { color: var(--orange); }
-    .edge-label {
-      position: absolute;
-      z-index: 5;
-      padding: 2px 8px;
-      border-radius: 7px;
-      background: var(--paper);
-      color: var(--muted);
-      font: 800 12px "Avenir Next", "PingFang SC", sans-serif;
-      white-space: nowrap;
-    }
     svg.paths { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
     .main { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
   </style>
@@ -176,14 +95,8 @@
 <body>
   <main class="page">
     <div class="kicker">CODEX TURN ROUTER · CONTROL LOOP</div>
-    <h1>一个 Turn 的控制回路</h1>
-    <p class="subtitle">一个 turn 只做一次决定；模型固定，effort 可变。</p>
-
-    <aside class="stamp">
-      <b>收益在哪</b>
-      贵模型做简单活，先降 effort；<br>
-      再算 model 的 break-even。
-    </aside>
+    <h1>一个 Turn 的四个决策</h1>
+    <p class="subtitle">模型固定，effort 可调；每个 turn 只做一次决定。</p>
 
     <svg class="paths" width="1500" height="900" viewBox="0 0 1500 900" aria-hidden="true">
       <defs>
@@ -191,27 +104,34 @@
           <path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/>
         </marker>
       </defs>
-      <path class="main" d="M 645 284 L 845 284"/>
-      <path class="main" d="M 1095 370 C 1130 490 1070 575 1015 590"/>
-      <path class="main" d="M 495 680 C 390 650 315 480 370 372"/>
+      <path class="main" d="M 608 280 L 892 280"/>
+      <path class="main" d="M 1150 368 L 1150 592"/>
+      <path class="main" d="M 892 680 L 608 680"/>
+      <path class="main" d="M 350 592 L 350 368"/>
     </svg>
 
     <section class="card pick">
-      <span class="num">01 · 选</span>
-      <h2>Jev → model + effort</h2>
-      <p>价格 · 缓存 · 会话 gate</p>
+      <h2>① 选 · Jev 一次</h2>
+      <p>model + effort</p>
+      <p>prompt / 候选 / 复杂度评分</p>
+    </section>
+
+    <section class="card gate">
+      <h2>② 闸门 · 确定性政策</h2>
+      <p>价格 break-even</p>
+      <p>缓存 · 会话 · 升级触发</p>
     </section>
 
     <section class="card run">
-      <span class="num">02 · 跑</span>
-      <h2>模型固定</h2>
-      <p>tool loop 复用；effort 用 <code>configuration_update</code></p>
+      <h2>③ 跑 · 模型固定</h2>
+      <p>tool loop 复用，不再问 Jev</p>
+      <p>effort 用 <code>configuration_update</code></p>
     </section>
 
     <section class="card learn">
-      <span class="num">03 · 学</span>
-      <h2>usage · cache · session</h2>
-      <p>失败升级；compaction 重置</p>
+      <h2>④ 学 · 观测与持久化</h2>
+      <p>usage → cache 热度</p>
+      <p>session pin / compaction reset</p>
     </section>
 
     <div class="center">
@@ -222,11 +142,7 @@
       </div>
     </div>
 
-    <div class="edge-label" style="left: 700px; top: 260px;">决定</div>
-    <div class="edge-label" style="left: 1100px; top: 470px;">执行</div>
-    <div class="edge-label" style="left: 365px; top: 545px;">反馈</div>
-
-    <div class="footer"><b>一句话：</b>模型是粗粒度，effort 是细粒度；先降 effort，再算 model 的 break-even。</div>
+    <div class="footer"><b>一句话：</b>先降 effort，再算 model 的 break-even；tool loop 内不切 model。</div>
   </main>
 </body>
 </html>
