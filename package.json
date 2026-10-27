@@ -49,7 +49,8 @@
     "docs",
     "README.md",
     "CONTEXT.md",
-    "LICENSE"
+    "LICENSE",
+    "README.en.md"
   ],
   "publishConfig": {
     "access": "public",
