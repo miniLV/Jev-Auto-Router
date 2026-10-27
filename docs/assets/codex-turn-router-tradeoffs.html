@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Turn Router · 收益边界</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #6d675d;
+      --grid: rgba(37,42,49,.055);
+      --orange: #d76838;
+      --orange-soft: #ffe3ce;
+      --green: #3f8f52;
+      --green-soft: #dff1d4;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff0b8;
+      --pink: #d35f84;
+      --pink-soft: #ffe0eb;
+      --blue: #3867d6;
+      --blue-soft: #dfe9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
+    }
+    .page { position: relative; width: 1500px; height: 900px; overflow: hidden; padding: 42px 50px; }
+    .kicker { color: var(--orange); font: 900 14px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
+    h1 { margin: 7px 0 0; font-size: 50px; line-height: 1.05; }
+    .subtitle { margin: 12px 0 0; color: var(--muted); font: 650 19px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
+    .matrix { position: absolute; left: 250px; top: 205px; width: 1000px; height: 500px; }
+    .axis-line { position: absolute; background: var(--ink); opacity: .55; }
+    .axis-line.x { left: 250px; top: 455px; width: 1000px; height: 3px; }
+    .axis-line.y { left: 750px; top: 205px; width: 3px; height: 500px; }
+    .quad {
+      position: absolute;
+      width: 430px;
+      height: 190px;
+      padding: 16px 20px;
+      border: 3.5px solid var(--stroke);
+      border-radius: 24px 19px 26px 20px;
+      background: var(--fill);
+      box-shadow: 8px 9px 0 rgba(37,42,49,.1);
+      transform: rotate(var(--tilt));
+      z-index: 3;
+    }
+    .quad h2 { margin: 0 0 8px; font-size: 28px; line-height: 1; }
+    .quad p { margin: 0; color: #3e4242; font: 700 16px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
+    .q1 { left: 285px; top: 225px; --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.5deg; }
+    .q2 { left: 785px; top: 225px; --stroke: var(--yellow); --fill: var(--yellow-soft); --tilt: .5deg; }
+    .q3 { left: 285px; top: 505px; --stroke: var(--green); --fill: var(--green-soft); --tilt: .4deg; }
+    .q4 { left: 785px; top: 505px; --stroke: var(--pink); --fill: var(--pink-soft); --tilt: -.4deg; }
+    .arrow { position: absolute; z-index: 4; font: 900 15px/1.2 "Avenir Next", "PingFang SC", sans-serif; color: var(--blue); }
+    .arrow.down { left: 172px; top: 300px; width: 66px; text-align: center; }
+    .arrow.down:after { content: "↓"; display: block; font-size: 34px; line-height: 1; }
+    .arrow.right { left: 785px; top: 705px; width: 300px; text-align: center; }
+    .arrow.right:after { content: "→"; display: block; font-size: 34px; line-height: 1; }
+    .corner { position: absolute; color: var(--muted); font: 800 13px "Avenir Next", "PingFang SC", sans-serif; }
+    .footer {
+      position: absolute; left: 50px; right: 50px; bottom: 48px;
+      padding: 9px 16px; border: 2.5px solid var(--ink); border-radius: 13px 10px 15px 11px;
+      background: rgba(255,252,243,.92); box-shadow: 4px 4px 0 rgba(37,42,49,.08);
+      font: 800 15px/1.35 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .footer b { color: var(--green); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX TURN ROUTER · COST BOUNDARY</div>
+    <h1>先降 effort，再降 model</h1>
+    <p class="subtitle">切 model 要重建 prefix；切 effort 保留 cache。收益取决于你从哪一格开始。</p>
+
+    <div class="axis-line x"></div>
+    <div class="axis-line y"></div>
+
+    <section class="quad q1">
+      <h2>强 + high</h2>
+      <p>最贵。简单活也按 frontier 价格烧 reasoning。</p>
+    </section>
+    <section class="quad q2">
+      <h2>便宜 + high</h2>
+      <p>省单价，但切过去要重建；高 effort 也不一定便宜。</p>
+    </section>
+    <section class="quad q3">
+      <h2>强 + low</h2>
+      <p>最稳的收益：模型不变，cache 保留，少烧 reasoning。</p>
+    </section>
+    <section class="quad q4">
+      <h2>便宜 + low</h2>
+      <p>最便宜，但质量风险最高；只适合可验证的简单活。</p>
+    </section>
+
+    <div class="arrow down">先降 effort</div>
+    <div class="arrow right">再降 model（break-even 后）</div>
+
+    <div class="footer"><b>一句话：</b>model 换的是单价，effort 换的是 token 量；前者要重建 cache，后者不用。</div>
+  </main>
+</body>
+</html>
