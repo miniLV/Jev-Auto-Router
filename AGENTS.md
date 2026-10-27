@@ -2,7 +2,7 @@
 
 ## 项目结构与模块组织
 
-主路径位于 `src/codex-router/`：`config` 负责 tier 与环境配置，`turn` 识别 fresh user turn，`policy` 做确定性决策，`jev` 调用 Jev，`proxy` 转发并固定模型，`cli` 启动真实 Codex。入口是 `bin/jev-codex.mjs`。旧的逐调用路径仍位于 `src/`，只作为 legacy 参考，不再由 `npm start` 或 `jev-codex` 调用。相关测试放在 `test/`，文件名采用 `*.test.ts`。设计说明与决策记录分别位于 `docs/sdd/` 和 `docs/adr/`；新架构见 `docs/codex-turn-router.md` 和 ADR 0018。`dist/` 是生成目录，不要直接编辑或提交其中内容。
+主路径位于 `src/codex-router/`：`config` 负责 tier 与环境配置，`turn` 识别 fresh user turn，`policy` 做确定性决策，`jev` 调用 Jev，`proxy` 转发并固定模型，`cli` 启动真实 Codex。入口是 `bin/jev-codex.mjs`。旧的逐调用路径已经移除，历史留在 git。相关测试放在 `test/`，文件名采用 `*.test.ts`。设计说明和决策记录位于 `docs/` 与 `docs/adr/`；新架构见 [docs/codex-turn-router.md](docs/codex-turn-router.md) 和 ADR 0018。`dist/` 是生成目录，不要直接编辑或提交其中内容。
 
 ## 构建、测试与开发命令
 
@@ -33,16 +33,6 @@
 
 项目背景、目标和代码导览见 [CONTEXT.md](CONTEXT.md)。改动产品行为前，查阅 [spec.md](spec.md) 和唯一运行时策略 [routing-policy.md](skills/jev-auto-router/references/routing-policy.md)；详细方案见 [docs/solution.md](docs/solution.md)。
 
-## Agent skills
+## Domain docs
 
-### Issue tracker
-
-需求和实施 ticket 保存在本地 `.scratch/`，不发布到 GitHub Issues。见 `docs/agents/issue-tracker.md`。
-
-### Triage labels
-
-本地文件用 `Status:` 记录默认五种 triage 状态。见 `docs/agents/triage-labels.md`。
-
-### Domain docs
-
-本仓库采用 single-context 结构，以根目录 `CONTEXT.md` 和 `docs/adr/` 为领域文档。见 `docs/agents/domain.md`。
+本仓库采用 single-context 结构，以根目录 [CONTEXT.md](CONTEXT.md)、[docs/codex-turn-router.md](docs/codex-turn-router.md) 和 [docs/adr/](docs/adr/) 为领域与决策文档。

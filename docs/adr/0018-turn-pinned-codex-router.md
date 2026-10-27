@@ -52,9 +52,8 @@ is maximally evidence-rich.
    tool output, files, images and credentials are not sent. Decision logs store
    a prompt hash and length, never prompt text.
 7. **Retirement.** The per-call proof catalog, Guard, fixed-baseline evidence
-   gate, paired evaluation and caller-edge install brief are not on the new
-   main path. Existing modules remain in the repository as legacy reference
-   until a follow-up cleanup removes them.
+   gate, paired evaluation, caller-edge install brief and their tests are
+   removed from the repository. Their history remains in git.
 8. **Improvements over the reference behaviour.** This version adds redacted
    decision logs, configurable tiers and cache threshold, a tested
    tool-continuation invariant, and a clean seam for later effort routing with
@@ -71,8 +70,7 @@ is maximally evidence-rich.
   find a cold cache.
 - Compaction, encrypted reasoning items and process-restart session pinning are
   explicit follow-ups, not solved by this ADR.
-- The legacy evidence path remains available for inspection but is no longer
-  the primary entry point.
+- The per-call evidence path is gone; the wrapper is the only runtime entry.
 
 ## Follow-ups
 

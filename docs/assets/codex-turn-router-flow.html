@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Turn Router · 主流程</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #625e56;
+      --grid: rgba(37, 42, 49, .055);
+      --blue: #3867d6;
+      --blue-soft: #e0eaff;
+      --teal: #20898d;
+      --teal-soft: #d5f2ee;
+      --green: #3f8f52;
+      --green-soft: #e1f2d7;
+      --orange: #d76838;
+      --orange-soft: #ffe5d1;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff1b5;
+      --pink: #d35f84;
+      --pink-soft: #ffe3eb;
+      --red: #b84736;
+      --red-soft: #ffe1da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    .page {
+      position: relative;
+      width: 1600px;
+      height: 1000px;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+    }
+    .kicker {
+      position: absolute;
+      top: 37px;
+      left: 56px;
+      color: var(--teal);
+      font: 900 15px "Avenir Next", "PingFang SC", sans-serif;
+      letter-spacing: .16em;
+    }
+    h1 {
+      position: absolute;
+      top: 60px;
+      left: 53px;
+      margin: 0;
+      font-size: 46px;
+      line-height: 1.12;
+    }
+    .subtitle {
+      position: absolute;
+      top: 116px;
+      left: 56px;
+      width: 1020px;
+      color: var(--muted);
+      font: 700 18px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp {
+      position: absolute;
+      top: 42px;
+      right: 54px;
+      width: 330px;
+      padding: 12px 18px;
+      border: 3px solid var(--green);
+      border-radius: 19px 15px 21px 16px;
+      background: var(--green-soft);
+      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
+      transform: rotate(1.2deg);
+      font: 800 15px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp b {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--green);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
+      font-size: 19px;
+    }
+    .lane {
+      position: absolute;
+      border: 2px dashed rgba(37,42,49,.29);
+      border-radius: 28px 23px 30px 25px;
+      background: rgba(255,255,255,.3);
+    }
+    .lane.flow { left: 45px; top: 180px; width: 1000px; height: 760px; }
+    .lane.notes { left: 1085px; top: 180px; width: 470px; height: 760px; }
+    .lane-label {
+      position: absolute;
+      left: 28px;
+      top: -17px;
+      padding: 4px 14px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 15px 12px;
+      background: var(--paper);
+      font-size: 17px;
+      font-weight: 900;
+      z-index: 6;
+    }
+    .card {
+      position: absolute;
+      z-index: 3;
+      padding: 8px 14px;
+      border: 3px solid var(--stroke);
+      border-radius: 19px 15px 21px 16px;
+      background: var(--fill);
+      box-shadow: 7px 8px 0 rgba(37,42,49,.11);
+      transform: rotate(var(--tilt, 0deg));
+    }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+    .red { --stroke: var(--red); --fill: var(--red-soft); }
+    .card h2 { margin: 0; font-size: 18px; line-height: 1.12; }
+    .card p { margin: 3px 0 0; color: #3f4242; font: 700 12px/1.35 "Avenir Next", "PingFang SC", sans-serif; }
+    .step { left: 85px; width: 240px; height: 58px; }
+    .s1 { top: 225px; --tilt: -.5deg; }
+    .s2 { top: 320px; --tilt: .5deg; }
+    .s3 { top: 415px; --tilt: -.4deg; }
+    .s4 { top: 510px; --tilt: .4deg; }
+    .s5 { top: 605px; --tilt: -.5deg; }
+    .s6 { top: 700px; --tilt: .5deg; }
+    .branch {
+      left: 520px;
+      top: 415px;
+      width: 250px;
+      height: 58px;
+      --tilt: .4deg;
+    }
+    .tool {
+      left: 85px;
+      top: 800px;
+      width: 850px;
+      height: 70px;
+      --tilt: -.2deg;
+    }
+    .tool h2 { font-size: 21px; }
+    .tool p { font-size: 13px; }
+    .note {
+      left: 1120px;
+      width: 400px;
+      padding: 14px 17px;
+      box-shadow: 6px 7px 0 rgba(37,42,49,.1);
+    }
+    .note h2 { font-size: 20px; margin-bottom: 7px; color: var(--stroke); }
+    .note p { margin: 0; font-size: 13px; line-height: 1.5; }
+    .n1 { top: 225px; height: 215px; --tilt: -.3deg; }
+    .n2 { top: 465px; height: 150px; --tilt: .35deg; }
+    .n3 { top: 640px; height: 255px; --tilt: -.3deg; }
+    .edge-label {
+      position: absolute;
+      z-index: 7;
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--muted);
+      font: 800 12px "Avenir Next", "PingFang SC", sans-serif;
+      white-space: nowrap;
+    }
+    svg.paths { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .flow { fill: none; stroke: var(--ink); stroke-width: 2.8; stroke-linejoin: round; marker-end: url(#arrow-ink); }
+    .branch-line { fill: none; stroke: #8b857b; stroke-width: 2.4; stroke-dasharray: 8 6; stroke-linejoin: round; marker-end: url(#arrow-muted); }
+    .loop { fill: none; stroke: var(--pink); stroke-width: 2.7; stroke-dasharray: 8 7; stroke-linejoin: round; marker-end: url(#arrow-pink); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX TURN ROUTER</div>
+    <h1>Codex Turn Router｜主流程</h1>
+    <div class="subtitle">一个 user turn 只问一次 Jev；tool loop 内模型固定。</div>
+    <div class="stamp"><b>核心约束</b>Turn 内不换模型；下一个 Turn 才重新判断。</div>
+
+    <div class="lane flow"><span class="lane-label">① 请求主链路</span></div>
+    <div class="lane notes"><span class="lane-label">② 决策与边界</span></div>
+
+    <svg class="paths" width="1600" height="1000" viewBox="0 0 1600 1000" aria-hidden="true">
+      <defs>
+        <marker id="arrow-ink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/></marker>
+        <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#8b857b"/></marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d35f84"/></marker>
+      </defs>
+      <path class="flow" d="M205 283 L205 311"/>
+      <path class="flow" d="M205 378 L205 406"/>
+      <path class="flow" d="M205 473 L205 501"/>
+      <path class="flow" d="M205 568 L205 596"/>
+      <path class="flow" d="M205 663 L205 691"/>
+      <path class="flow" d="M205 758 L205 791"/>
+      <path class="branch-line" d="M325 444 L512 444"/>
+      <path class="branch-line" d="M645 473 L645 800"/>
+      <path class="loop" d="M85 835 L55 835 L55 254 L77 254"/>
+    </svg>
+
+    <section class="card blue step s1"><h2>你发一句话</h2><p>一个 Turn 的起点</p></section>
+    <section class="card teal step s2"><h2>jev-codex 包装器</h2><p>启动真实 Codex；临时 provider</p></section>
+    <section class="card yellow step s3"><h2>fresh user turn?</h2><p>有新的用户消息？</p></section>
+    <section class="card orange step s4"><h2>问 Jev 一次</h2><p>prompt + 当前模型 + 上下文</p></section>
+    <section class="card yellow step s5"><h2>政策闸门</h2><p>确定性规则，不做第二次语义选择</p></section>
+    <section class="card green step s6"><h2>固定本轮模型</h2><p>本轮不再问 Jev</p></section>
+    <section class="card blue branch"><h2>否：沿用本轮模型</h2><p>tool 结果 / 继续，不重新选</p></section>
+    <section class="card green tool"><h2>Tool Loop：不再问 Jev</h2><p>模型 ↔ 工具来回；结束后给最终回答。Jev 延迟只在本轮第一跳。</p></section>
+
+    <section class="card yellow note n1">
+      <h2>政策闸门看什么</h2>
+      <p>
+        ① 用户说 use ... → 用户优先<br>
+        ② Jev 失败 / 超时 / 低置信 → 保持当前<br>
+        ③ 低置信不降级；升级最多 balanced<br>
+        ④ 上下文过大 → 不降级<br>
+        ⑤ 目标 tier 不可用 → 向上找
+      </p>
+    </section>
+    <section class="card orange note n2">
+      <h2>缓存边界</h2>
+      <p>
+        切一次，重建一次。<br>
+        大上下文挡住降级；升级仍可能。<br>
+        阈值是启发式，不是精确成本。
+      </p>
+    </section>
+    <section class="card teal note n3">
+      <h2>入口与日志</h2>
+      <p>
+        真实 Codex + 临时 provider；<br>
+        picker 里出现 <code>jev-router</code>；<br>
+        手动选真实模型绕过路由；<br>
+        日志只记 hash、长度、模型和原因；<br>
+        <code>JEV_CODEX_COMMENTARY=0</code> 关闭路由提示。
+      </p>
+    </section>
+
+    <div class="edge-label" style="left: 345px; top: 424px;">否：tool 继续</div>
+    <div class="edge-label" style="left: 655px; top: 615px;">tool 结果回模型</div>
+    <div class="edge-label" style="left: 68px; top: 196px; color: var(--pink);">下一个 Turn</div>
+  </main>
+</body>
+</html>
