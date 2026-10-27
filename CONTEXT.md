@@ -1,8 +1,8 @@
 # Shared Context
 
-Codex-only, turn-pinned model routing. The runtime entry is `jev-codex`; the
-architecture decision is [ADR 0018](docs/adr/0018-turn-pinned-codex-router.md).
-Usage and configuration live in [docs/codex-turn-router.md](docs/codex-turn-router.md).
+Codex-only, turn-pinned model routing. The runtime entry is `jev-codex`.
+The design rationale, usage and configuration live in
+[docs/codex-turn-router.md](docs/codex-turn-router.md).
 
 ## Glossary
 

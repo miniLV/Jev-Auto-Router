@@ -5,8 +5,7 @@ a temporary provider, adds a virtual `jev-router` model to the picker, and asks
 Jev once at the start of each user turn. The chosen model is pinned for the
 whole tool loop.
 
-The old per-call evidence path has been removed. Its history remains in git
-and in ADR 0018.
+The old per-call evidence path has been removed. Its history remains in git.
 
 ## Why a turn, not every model call
 

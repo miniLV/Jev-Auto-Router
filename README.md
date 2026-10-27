@@ -6,8 +6,7 @@
 
 ![Codex Turn Router 主流程](docs/assets/codex-turn-router-flow.png)
 
-- 使用与配置：[docs/codex-turn-router.md](docs/codex-turn-router.md)
-- 架构决策：[ADR 0018](docs/adr/0018-turn-pinned-codex-router.md)
+- 使用、配置与设计取舍：[docs/codex-turn-router.md](docs/codex-turn-router.md)
 
 ## 为什么是 turn，而不是每次 model call
 
