@@ -13,17 +13,17 @@
 
 ## 安装
 
-发布到 npm alpha 后：
+发布到 npm 后：
 
 ```sh
-npm install -g jev-auto-router@alpha
+npm install -g jev-auto-router
 jev-codex
 ```
 
 或者不全局安装：
 
 ```sh
-npx -y jev-auto-router@alpha
+npx -y jev-auto-router
 ```
 
 从源码：

@@ -1,6 +1,6 @@
 {
   "name": "jev-auto-router",
-  "version": "0.3.0",
+  "version": "0.1.0",
   "engines": {
     "node": ">=22"
   },
@@ -13,7 +13,8 @@
     "codex:proxy": "npm run build && node dist/src/codex-router/server.js",
     "prepare": "npm run build",
     "prepack": "npm run build",
-    "publish:alpha": "npm run build && npm publish --tag alpha"
+    "publish:alpha": "npm run build && npm publish --tag alpha",
+    "publish:latest": "npm run build && npm publish --tag latest"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
@@ -52,6 +53,6 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "alpha"
+    "tag": "latest"
   }
 }
