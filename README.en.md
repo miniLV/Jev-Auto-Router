@@ -118,12 +118,6 @@ Notes:
 - The Codex app uses the same local provider; configure it with `jev-codex setup-app`.
 - The actual list depends on your account catalog; the model names above are illustrative.
 
-### Codex CLI
-
-![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
-
-The real Codex model picker: `Jev Auto Router` is the virtual entry; real models remain directly selectable.
-
 ### Codex app
 
 ![Codex app model picker with Jev Auto Router](docs/assets/codex-app-model-picker.png)
@@ -164,6 +158,12 @@ Session
 Every model switch forces the new model to rebuild the prompt prefix. Deciding at the start of a turn and keeping the model fixed inside the tool loop limits rebuilds to at most one per user turn and avoids model oscillation mid-task.
 
 Once the model is fixed, effort can move independently: use `configuration_update` to change the reasoning level, keep the request-level effort at its baseline, and replay earlier updates in place. The current implementation is **per-turn effort**, not per-step. That avoids an extra per-call classifier and never switches models just to change effort.
+
+![Turn Router main flow](docs/assets/codex-turn-router-flow-en.png)
+
+![Turn Router control loop](docs/assets/codex-turn-router-control-plane-en.png)
+
+Main flow: new turn → Jev once → policy gates → pinned model → tool loop. Control loop: pick → gate → run → learn.
 
 ## Value: lower effort first, then model
 

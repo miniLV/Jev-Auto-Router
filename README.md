@@ -118,12 +118,6 @@ GPT-5.6-Luna
 - Codex app 通过同一套本地 provider 接入；用 `jev-codex setup-app` 配置。
 - 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
 
-### Codex CLI
-
-![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
-
-真实 Codex model picker：`Jev Auto Router` 是虚拟 entry；下面的真实模型仍然可以直接选择。
-
 ### Codex app
 
 ![Codex app model picker with Jev Auto Router](docs/assets/codex-app-model-picker.png)
@@ -164,6 +158,12 @@ Session
 每次切模型都会让新模型重建 prompt prefix。把决策放在 turn 开头、把模型固定在 tool loop 内，能把切换成本压到“每个 user turn 最多一次”，也避免模型在任务中途反复变化。
 
 模型固定之后，effort 可以独立调整：用 `configuration_update` 改变思考档位，保持 request-level effort 不变，并把历史 update 原地重放。当前实现是 **per-turn effort**，不是 per-step；这样不需要额外的逐调用分类器，也不会为了 effort 切模型。
+
+![Turn Router 主流程](docs/assets/codex-turn-router-flow.png)
+
+![Turn Router 控制回路](docs/assets/codex-turn-router-control-plane.png)
+
+主流程：新 turn → Jev 一次 → 政策闸门 → 固定模型 → tool loop。控制回路：选 → 闸 → 跑 → 学。
 
 ## 价值：先降 effort，再降 model
 
