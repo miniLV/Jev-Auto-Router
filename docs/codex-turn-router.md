@@ -124,6 +124,9 @@ break-even. `JEV_CODEX_OUTPUT_TOKENS_PER_TURN` estimates output cost.
 
 ## Effort routing
 
+Effort routing is **off by default** in this alpha. Enable it explicitly with
+`JEV_CODEX_EFFORT_ROUTING=turn` after a live Codex smoke test.
+
 The model stays pinned while effort can change at a turn boundary. The router:
 
 - keeps the request-level `reasoning.effort` as the baseline;
@@ -190,7 +193,7 @@ is opt-in because it trades context fidelity for switchability.
 | `JEV_CODEX_MAX_SWITCHES` | `0` | Max model changes per session (`0` = unlimited) |
 | `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | Full turns to keep a newly switched model |
 | `JEV_CODEX_CACHE_TTL_MS` | `1800000` | Idle time before guards reset |
-| `JEV_CODEX_EFFORT_ROUTING` | `turn` | `off` or per-turn effort |
+| `JEV_CODEX_EFFORT_ROUTING` | `off` | `turn` enables per-turn effort |
 | `JEV_CODEX_EFFORT_CAP` | `high` | Maximum effort |
 | `JEV_CODEX_EFFORT_FALLBACK` | `high` | Effort when scores are missing |
 | `JEV_CODEX_PRICES` | unset | Per-model JSON price table for break-even |

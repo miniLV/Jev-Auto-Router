@@ -134,7 +134,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
     taskTurnBudget: envInt(env, "JEV_CODEX_TASK_TURN_BUDGET", 0, 0),
     lockBeforeEndTurns: envInt(env, "JEV_CODEX_LOCK_BEFORE_END_TURNS", DEFAULT_LOCK_BEFORE_END_TURNS, 0),
     outputTokensPerTurn: envInt(env, "JEV_CODEX_OUTPUT_TOKENS_PER_TURN", DEFAULT_OUTPUT_TOKENS_PER_TURN, 0),
-    effortRouting: envString(env, "JEV_CODEX_EFFORT_ROUTING") === "off" ? "off" : "turn",
+    effortRouting: envString(env, "JEV_CODEX_EFFORT_ROUTING") === "turn" ? "turn" : "off",
     effortCap: envString(env, "JEV_CODEX_EFFORT_CAP") ?? DEFAULT_EFFORT_CAP,
     effortFallback: envString(env, "JEV_CODEX_EFFORT_FALLBACK") ?? DEFAULT_EFFORT_FALLBACK,
     upgradeMode: (envString(env, "JEV_CODEX_UPGRADE_MODE") === "always" ? "always" : "triggered") as UpgradeMode,

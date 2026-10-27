@@ -11,6 +11,32 @@
 - 使用、配置与设计取舍：[docs/codex-turn-router.md](docs/codex-turn-router.md)
 - 测试样本与方法：[docs/evaluation-plan.md](docs/evaluation-plan.md)
 
+## 安装
+
+发布到 npm 后：
+
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+或者不全局安装：
+
+```sh
+npx -y jev-auto-router
+```
+
+从源码：
+
+```sh
+git clone https://github.com/miniLV/codex-auto-router.git
+cd codex-auto-router
+npm ci
+npm run build
+npm link
+jev-codex
+```
+
 ## 为什么是 turn，而不是每次 model call
 
 ```text
@@ -29,6 +55,9 @@ Session
 每次切模型都会让新模型重建 prompt prefix。把决策放在 turn 开头、把模型固定在 tool loop 内，能把切换成本压到“每个 user turn 最多一次”，也避免模型在任务中途反复变化。
 
 模型固定之后，effort 可以独立调整：用 `configuration_update` 改变思考档位，保持 request-level effort 不变，并把历史 update 原地重放。当前实现是 **per-turn effort**，不是 per-step；这样不需要额外的逐调用分类器，也不会为了 effort 切模型。
+
+> [!WARNING]
+> Alpha：effort routing 默认关闭，且 `configuration_update` 的实机 cache 行为还没有在真实 Codex + GPT 会话中验证。先设 `JEV_CODEX_EFFORT_ROUTING=turn` 做一次小任务 smoke，再长期开启。
 
 ## 快速开始
 
@@ -105,7 +134,7 @@ jev-codex exec "fix the failing test"
 | `JEV_CODEX_MAX_SWITCHES` | `0` | 每个 session 最多切换次数（0 = 不限） |
 | `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | 切换后至少稳定几个 turn |
 | `JEV_CODEX_CACHE_TTL_MS` | `1800000` | 空闲多久后重置稳定保护 |
-| `JEV_CODEX_EFFORT_ROUTING` | `turn` | 每轮调整 effort；`off` 关闭 |
+| `JEV_CODEX_EFFORT_ROUTING` | `off` | 设为 `turn` 才启用每轮 effort |
 | `JEV_CODEX_EFFORT_CAP` | `high` | effort 上限 |
 | `JEV_CODEX_EFFORT_FALLBACK` | `high` | 没有评分时的回退档位 |
 | `JEV_CODEX_PRICES` | 未设置 | 每个模型的价格 JSON，用于 break-even |

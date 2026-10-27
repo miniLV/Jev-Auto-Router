@@ -1,7 +1,6 @@
 {
   "name": "jev-auto-router",
   "version": "0.3.0",
-  "private": true,
   "engines": {
     "node": ">=22"
   },
@@ -11,7 +10,9 @@
     "test": "npm run build && node --test dist/test/*.test.js",
     "start": "node dist/src/codex-router/server.js",
     "codex": "npm run build && node bin/jev-codex.mjs",
-    "codex:proxy": "npm run build && node dist/src/codex-router/server.js"
+    "codex:proxy": "npm run build && node dist/src/codex-router/server.js",
+    "prepare": "npm run build",
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
@@ -20,5 +21,35 @@
   "dependencies": {},
   "bin": {
     "jev-codex": "bin/jev-codex.mjs"
+  },
+  "description": "Turn-pinned model and reasoning-effort routing for Codex, powered by TypeSafe Jev.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miniLV/codex-auto-router.git"
+  },
+  "homepage": "https://github.com/miniLV/codex-auto-router",
+  "bugs": {
+    "url": "https://github.com/miniLV/codex-auto-router/issues"
+  },
+  "keywords": [
+    "codex",
+    "jev",
+    "typesafe",
+    "model-routing",
+    "reasoning-effort",
+    "prompt-cache",
+    "coding-agent"
+  ],
+  "files": [
+    "bin",
+    "dist/src",
+    "docs",
+    "README.md",
+    "CONTEXT.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
