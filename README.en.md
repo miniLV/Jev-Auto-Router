@@ -41,6 +41,25 @@ npm link
 jev-codex
 ```
 
+## Result: one extra model in the picker
+
+`jev-codex` does not fork Codex. It launches the real Codex CLI, injects a temporary provider, and (by default) adds one virtual model to the Codex CLI model picker / `/model`:
+
+```text
+jev-router      Jev Router
+gpt-6-sol
+gpt-6.1-sol
+...
+```
+
+Selecting `jev-router` enables routing; selecting a real model bypasses it. This is the most visible integration result: **one extra model-list entry, not a separate agent.**
+
+Notes:
+
+- `JEV_API_KEY` / `TYPESAFE_API_KEY` is required. Without a key, `jev-codex` launches Codex without routing, and `jev-router` will not appear.
+- This version covers **Codex CLI** only. The Codex app is not wired to this wrapper yet; if the app supports a custom provider, it could point to the local proxy, but that is untested and undocumented.
+- The actual list depends on your account catalog; the model names above are illustrative.
+
 ## Why turn-pinned, not every model call
 
 ```text

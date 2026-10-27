@@ -41,6 +41,25 @@ npm link
 jev-codex
 ```
 
+## 结果：model list 里多一个 `jev-router`
+
+`jev-codex` 不需要 fork Codex。它启动真实的 Codex CLI，注入一个临时 provider；默认启动时，在 Codex CLI 的 model picker / `/model` 里会多出一个虚拟模型：
+
+```text
+jev-router      Jev Router
+gpt-6-sol
+gpt-6.1-sol
+...
+```
+
+选中 `jev-router` 才会自动路由；直接选真实模型会绕过路由。这是这个项目最直观的集成结果：**model list 里多一个 entry，而不是一套新的 agent。**
+
+注意：
+
+- 需要 `JEV_API_KEY` / `TYPESAFE_API_KEY`。没有 key 时 `jev-codex` 会启动 Codex 但不启用路由，model list 里不会出现 `jev-router`。
+- 当前只覆盖 **Codex CLI**。Codex app 还没有接入这个 wrapper；如果 app 支持自定义 provider，理论上可以指向本地代理，但未验证、未文档化。
+- 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
+
 ## 为什么是 turn，而不是每次 model call
 
 ```text
