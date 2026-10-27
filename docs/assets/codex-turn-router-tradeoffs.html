@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Codex Turn Router · 收益边界</title>
+  <title>Codex Turn Router · 三种花法</title>
   <style>
     :root {
       --paper: #f8f5ec;
@@ -12,14 +12,16 @@
       --grid: rgba(37,42,49,.055);
       --orange: #d76838;
       --orange-soft: #ffe3ce;
-      --green: #3f8f52;
-      --green-soft: #dff1d4;
       --yellow: #d1a52b;
       --yellow-soft: #fff0b8;
-      --pink: #d35f84;
-      --pink-soft: #ffe0eb;
+      --green: #3f8f52;
+      --green-soft: #dff1d4;
+      --teal: #20898d;
+      --teal-soft: #d6f1ee;
       --blue: #3867d6;
       --blue-soft: #dfe9ff;
+      --red: #b84736;
+      --red-soft: #ffe1da;
     }
     * { box-sizing: border-box; }
     body {
@@ -32,77 +34,154 @@
       background-size: 34px 34px;
       font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
     }
-    .page { position: relative; width: 1500px; height: 900px; overflow: hidden; padding: 42px 50px; }
+    .page { position: relative; width: 1600px; height: 800px; overflow: hidden; padding: 42px 50px; }
     .kicker { color: var(--orange); font: 900 14px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
     h1 { margin: 7px 0 0; font-size: 50px; line-height: 1.05; }
-    .subtitle { margin: 12px 0 0; color: var(--muted); font: 650 19px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
-    .matrix { position: absolute; left: 250px; top: 205px; width: 1000px; height: 500px; }
-    .axis-line { position: absolute; background: var(--ink); opacity: .55; }
-    .axis-line.x { left: 250px; top: 455px; width: 1000px; height: 3px; }
-    .axis-line.y { left: 750px; top: 205px; width: 3px; height: 500px; }
-    .quad {
-      position: absolute;
-      width: 430px;
-      height: 190px;
-      padding: 16px 20px;
+    .subtitle { margin: 12px 0 0; max-width: 1030px; color: var(--muted); font: 650 18px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
+    .legend { position: absolute; right: 50px; top: 52px; display: flex; gap: 14px; align-items: center; font: 700 12px "Avenir Next", "PingFang SC", sans-serif; color: var(--muted); }
+    .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .legend .hit { background: #75b98a; }
+    .legend .out { background: #e28a57; }
+    .legend .rebuild { background: #c75d4f; }
+    .panels { position: absolute; left: 50px; top: 190px; width: 1500px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .panel {
+      position: relative;
+      height: 420px;
+      padding: 20px 22px;
       border: 3.5px solid var(--stroke);
       border-radius: 24px 19px 26px 20px;
       background: var(--fill);
       box-shadow: 8px 9px 0 rgba(37,42,49,.1);
       transform: rotate(var(--tilt));
-      z-index: 3;
     }
-    .quad h2 { margin: 0 0 8px; font-size: 28px; line-height: 1; }
-    .quad p { margin: 0; color: #3e4242; font: 700 16px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
-    .q1 { left: 285px; top: 225px; --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.5deg; }
-    .q2 { left: 785px; top: 225px; --stroke: var(--yellow); --fill: var(--yellow-soft); --tilt: .5deg; }
-    .q3 { left: 285px; top: 505px; --stroke: var(--green); --fill: var(--green-soft); --tilt: .4deg; }
-    .q4 { left: 785px; top: 505px; --stroke: var(--pink); --fill: var(--pink-soft); --tilt: -.4deg; }
-    .arrow { position: absolute; z-index: 4; font: 900 15px/1.2 "Avenir Next", "PingFang SC", sans-serif; color: var(--blue); }
-    .arrow.down { left: 172px; top: 300px; width: 66px; text-align: center; }
-    .arrow.down:after { content: "↓"; display: block; font-size: 34px; line-height: 1; }
-    .arrow.right { left: 785px; top: 705px; width: 300px; text-align: center; }
-    .arrow.right:after { content: "→"; display: block; font-size: 34px; line-height: 1; }
-    .corner { position: absolute; color: var(--muted); font: 800 13px "Avenir Next", "PingFang SC", sans-serif; }
-    .footer {
-      position: absolute; left: 50px; right: 50px; bottom: 48px;
-      padding: 9px 16px; border: 2.5px solid var(--ink); border-radius: 13px 10px 15px 11px;
-      background: rgba(255,252,243,.92); box-shadow: 4px 4px 0 rgba(37,42,49,.08);
-      font: 800 15px/1.35 "Avenir Next", "PingFang SC", sans-serif;
+    .panel.a { --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.4deg; }
+    .panel.b { --stroke: var(--yellow); --fill: var(--yellow-soft); --tilt: .4deg; }
+    .panel.c { --stroke: var(--green); --fill: var(--green-soft); --tilt: -.3deg; }
+    .panel h2 { margin: 0 0 6px; font-size: 25px; line-height: 1.1; }
+    .panel .tag { margin: 0 0 16px; color: var(--muted); font: 700 13px "Avenir Next", "PingFang SC", sans-serif; }
+    .turns { display: flex; gap: 6px; margin: 0 0 10px; }
+    .turn {
+      flex: 1;
+      min-width: 0;
+      padding: 7px 4px;
+      border: 2px solid rgba(37,42,49,.2);
+      border-radius: 9px 7px 10px 8px;
+      background: rgba(255,255,255,.55);
+      text-align: center;
+      font: 800 11px/1.15 "SFMono-Regular", Menlo, monospace;
     }
-    .footer b { color: var(--green); }
+    .turn b { display: block; color: var(--muted); font-size: 10px; letter-spacing: .04em; }
+    .turn.high { border-color: var(--orange); color: var(--orange); }
+    .turn.low { border-color: var(--green); color: var(--green); }
+    .turn.med { border-color: var(--yellow); color: #9b7514; }
+    .turn.cheap { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
+    .turn.strong { border-color: var(--orange); color: var(--orange); background: #fff1e5; }
+    .turn.rebuild { border-color: var(--red); color: var(--red); background: var(--red-soft); }
+    .turns-label { margin: 0 0 18px; color: var(--muted); font: 700 11px "Avenir Next", "PingFang SC", sans-serif; }
+    .bill-label { display: flex; justify-content: space-between; margin: 0 0 6px; color: var(--muted); font: 800 12px "Avenir Next", "PingFang SC", sans-serif; }
+    .bar-track { height: 44px; border-radius: 7px; background: rgba(255,255,255,.55); border: 2px solid rgba(37,42,49,.17); overflow: hidden; display: flex; }
+    .seg { height: 100%; display: grid; place-items: center; color: #fff; font: 800 11px "Avenir Next", "PingFang SC", sans-serif; white-space: nowrap; overflow: hidden; }
+    .hit { background: #75b98a; }
+    .out { background: #e28a57; }
+    .rebuild { background: #c75d4f; }
+    .a .bar-track { width: 100%; }
+    .b .bar-track { width: 84%; }
+    .c .bar-track { width: 62%; }
+    .verdict { margin: 20px 0 0; padding-top: 15px; border-top: 2px dashed rgba(37,42,49,.22); font: 700 15px/1.45 "Avenir Next", "PingFang SC", sans-serif; }
+    .verdict strong { display: block; margin-bottom: 4px; color: var(--ink); font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif; font-size: 20px; }
+    .panel-foot {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 2px dashed rgba(37,42,49,.2);
+      color: var(--muted);
+      font: 800 12px "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .panel-foot b { color: var(--ink); }
+    .note { position: absolute; left: 50px; right: 50px; bottom: 30px; padding: 10px 16px; border: 2.5px solid var(--ink); border-radius: 13px 10px 15px 11px; background: rgba(255,252,243,.92); box-shadow: 4px 4px 0 rgba(37,42,49,.08); font: 800 15px/1.35 "Avenir Next", "PingFang SC", sans-serif; }
+    .note b { color: var(--green); }
   </style>
 </head>
 <body>
   <main class="page">
-    <div class="kicker">CODEX TURN ROUTER · COST BOUNDARY</div>
-    <h1>先降 effort，再降 model</h1>
-    <p class="subtitle">切 model 要重建 prefix；切 effort 保留 cache。收益取决于你从哪一格开始。</p>
+    <div class="kicker">CODEX TURN ROUTER · VALUE</div>
+    <h1>同一个 5-turn 任务，三种花法</h1>
+    <p class="subtitle">示意，不是实测账单。重点看条形长度，以及 B 里那块红色的 prefix 重建。</p>
+    <div class="legend">
+      <span><i class="hit"></i>cache hit</span>
+      <span><i class="out"></i>reasoning + output</span>
+      <span><i class="rebuild"></i>prefix rebuild</span>
+    </div>
 
-    <div class="axis-line x"></div>
-    <div class="axis-line y"></div>
+    <div class="panels">
+      <section class="panel a">
+        <h2>A · 永远 frontier + high</h2>
+        <p class="tag">同一个强模型，所有 turn 都用高 effort</p>
+        <div class="turns">
+          <div class="turn high"><b>T1</b>high</div>
+          <div class="turn high"><b>T2</b>high</div>
+          <div class="turn high"><b>T3</b>high</div>
+          <div class="turn high"><b>T4</b>high</div>
+          <div class="turn high"><b>T5</b>high</div>
+        </div>
+        <p class="turns-label">5 turn × 高思考；模型不变，cache 命中稳定</p>
+        <div class="bill-label"><span>相对账单</span><span>最长</span></div>
+        <div class="bar-track">
+          <div class="seg hit" style="width:30%">cache</div>
+          <div class="seg out" style="width:70%">reasoning + output</div>
+        </div>
+        <p class="verdict"><strong>最贵</strong>简单活也按 frontier 的价格烧 reasoning。</p>
+        <div class="panel-foot"><span>质量 <b>高</b></span><span>成本 <b>高</b></span><span>适合 <b>难任务</b></span></div>
+      </section>
 
-    <section class="quad q1">
-      <h2>强 + high</h2>
-      <p>最贵。简单活也按 frontier 价格烧 reasoning。</p>
-    </section>
-    <section class="quad q2">
-      <h2>便宜 + high</h2>
-      <p>省单价，但切过去要重建；高 effort 也不一定便宜。</p>
-    </section>
-    <section class="quad q3">
-      <h2>强 + low</h2>
-      <p>最稳的收益：模型不变，cache 保留，少烧 reasoning。</p>
-    </section>
-    <section class="quad q4">
-      <h2>便宜 + low</h2>
-      <p>最便宜，但质量风险最高；只适合可验证的简单活。</p>
-    </section>
+      <section class="panel b">
+        <h2>B · 每次调用换 model</h2>
+        <p class="tag">简单 turn 用便宜模型，困难 turn 换回来</p>
+        <div class="turns">
+          <div class="turn cheap"><b>T1</b>cheap</div>
+          <div class="turn strong"><b>T2</b>strong</div>
+          <div class="turn cheap"><b>T3</b>cheap</div>
+          <div class="turn strong"><b>T4</b>strong</div>
+          <div class="turn cheap"><b>T5</b>cheap</div>
+        </div>
+        <p class="turns-label">模型来回切；每次切过去都要重建 prefix</p>
+        <div class="bill-label"><span>相对账单</span><span>中</span></div>
+        <div class="bar-track">
+          <div class="seg hit" style="width:20%"></div>
+          <div class="seg out" style="width:38%">output</div>
+          <div class="seg rebuild" style="width:42%">prefix rebuild</div>
+        </div>
+        <p class="verdict"><strong>省单价，但重建吃回去</strong>切换越频繁，红色块越大。</p>
+        <div class="panel-foot"><span>质量 <b>波动</b></span><span>成本 <b>中</b></span><span>适合 <b>不推荐</b></span></div>
+      </section>
 
-    <div class="arrow down">先降 effort</div>
-    <div class="arrow right">再降 model（break-even 后）</div>
+      <section class="panel c">
+        <h2>C · 模型固定 + effort</h2>
+        <p class="tag">强模型不动；routine turn 降 effort，难 turn 升回来</p>
+        <div class="turns">
+          <div class="turn low"><b>T1</b>low</div>
+          <div class="turn low"><b>T2</b>low</div>
+          <div class="turn med"><b>T3</b>med</div>
+          <div class="turn high"><b>T4</b>high</div>
+          <div class="turn low"><b>T5</b>low</div>
+        </div>
+        <p class="turns-label">模型始终是 strong；effort 变化，prefix 继续命中</p>
+        <div class="bill-label"><span>相对账单</span><span>最短</span></div>
+        <div class="bar-track">
+          <div class="seg hit" style="width:42%">cache</div>
+          <div class="seg out" style="width:58%">reasoning + output</div>
+        </div>
+        <p class="verdict"><strong>最稳的节省</strong>不付 prefix 重建，只把 routine turn 的 reasoning 降下来。</p>
+        <div class="panel-foot"><span>质量 <b>可控</b></span><span>成本 <b>低</b></span><span>适合 <b>日常</b></span></div>
+      </section>
+    </div>
 
-    <div class="footer"><b>一句话：</b>model 换的是单价，effort 换的是 token 量；前者要重建 cache，后者不用。</div>
+    <div class="note"><b>价值：</b>effort 省的是 token 量；model 省的是单价；切模型会多出一块 prefix 重建。先降 effort，再算 break-even。</div>
   </main>
 </body>
 </html>

@@ -127,7 +127,7 @@ break-even. `JEV_CODEX_OUTPUT_TOKENS_PER_TURN` estimates output cost.
 Effort routing is **off by default** in this alpha. Enable it explicitly with
 `JEV_CODEX_EFFORT_ROUTING=turn` after a live Codex smoke test.
 
-![Effort vs model tradeoff](assets/codex-turn-router-tradeoffs.png)
+![Same 5-turn task, three spending strategies](assets/codex-turn-router-tradeoffs.png)
 
 The model stays pinned while effort can change at a turn boundary. The router:
 
