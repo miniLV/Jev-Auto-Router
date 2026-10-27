@@ -26,11 +26,11 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/miniLV/codex-auto-router.git"
+    "url": "git+https://github.com/miniLV/Jev-Auto-Router.git"
   },
-  "homepage": "https://github.com/miniLV/codex-auto-router",
+  "homepage": "https://github.com/miniLV/Jev-Auto-Router",
   "bugs": {
-    "url": "https://github.com/miniLV/codex-auto-router/issues"
+    "url": "https://github.com/miniLV/Jev-Auto-Router/issues"
   },
   "keywords": [
     "codex",

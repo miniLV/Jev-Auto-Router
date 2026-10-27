@@ -29,8 +29,8 @@ npx -y jev-auto-router
 从源码：
 
 ```sh
-git clone https://github.com/miniLV/codex-auto-router.git
-cd codex-auto-router
+git clone https://github.com/miniLV/Jev-Auto-Router.git
+cd Jev-Auto-Router
 npm ci
 npm run build
 npm link
