@@ -184,7 +184,67 @@ A release candidate should meet all of these before claiming savings:
 If quality fails, report cost without claiming savings. If cost is `UNKNOWN`,
 do not claim savings.
 
-## 9. Biggest benefit
+## 9. Reference results from adjacent projects
+
+These are external, not independent verification of this router. Use them to
+choose hypotheses, not as our numbers.
+
+| Project | Published result | Caveat |
+| --- | --- | --- |
+| `dominicrico/jev-router` (Claude Code) | Small tasks −97%, everyday −65% vs always Opus; hard set: plain Sonnet cheapest | Real Claude Code runs with hidden tests. Long warm sessions: cache guard cut switches 6→1 and halved cache rewrites, but the bill stayed the same; lean routing averaged Opus cost while plain Sonnet was 43% cheaper. |
+| `robertn702/reasoning-router` | Selected SWE-bench tasks: 52% fewer output tokens on a short Flask fix; 5–7% on harder Django/pytest | Selected tasks, not a general savings claim; no quality guarantee from the classifier. |
+| `gakonst/nanocode` PR #805 | Cache-preserving reasoning updates for Astra/Sol | PR states journeys are synthetic; no live provider cache-hit claim. |
+| LiteLLM auto-router | 37–69% cheaper across several benchmarks; switch-back cache warm 97.4% / 99.3% | Vendor benchmarks; workload- and TTL-dependent. |
+
+The most useful lesson is the **baseline choice**:
+
+- Against *always Opus/frontier*, savings can be very large.
+- Against an already-balanced model, savings shrink or disappear.
+- On long warm sessions, model switching can fail to pay; plain mid-tier can
+  be cheaper than clever routing.
+
+Every experiment should report both baselines separately. Otherwise the
+headline number conflates "don't use frontier for everything" with "routing is
+smart".
+
+## 10. Can this run with DeepSeek only?
+
+Not the current benchmark. The runtime being evaluated is Codex-specific:
+
+- it expects Codex's Responses-shaped requests and auth;
+- effort routing uses OpenAI `configuration_update`;
+- Jev supplies the complexity scores;
+- the price/cache model assumes the provider's cache accounting.
+
+A DeepSeek-only setup would test a different system:
+
+- DeepSeek is consumed through Chat Completions in most clients;
+- its reasoning control and cache semantics differ;
+- without Jev, effort routing falls back to `high`;
+- a DeepSeek adapter would need a separate agent harness, and its results would
+  not transfer to Codex + GPT-6.
+
+What can run now without Codex or Jev:
+
+- `npm test` — request shape, turn pin, retry dedupe, gates, effort anchors,
+  compaction reset, session store.
+- A synthetic economic replay with fixed usage traces and a price table — tests
+  accounting and gate arithmetic, not model quality.
+- A mock-upstream HTTP test — tests streaming and request rewriting.
+
+What cannot be concluded without a live Codex/GPT/Jev setup:
+
+- real cache-hit rate;
+- real output/reasoning token savings;
+- quality non-inferiority;
+- latency.
+
+Recommendation: do not spend a full benchmark budget on DeepSeek for this
+router. Run the offline phases now; run the paired benchmark when Codex + at
+least two GPT tiers + Jev are available. If DeepSeek support is a product goal,
+build a separate adapter and evaluate it on its own cache/effort semantics.
+
+## 11. Biggest benefit
 
 The short answer: **yes, overpaying a frontier model for simple work is the
 obvious waste, but the larger cache-safe lever is usually effort, not model
