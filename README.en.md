@@ -24,9 +24,7 @@
     <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
   </a>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
-  <a href="https://www.npmjs.com/package/jev-auto-router">
-    <img alt="npm" src="https://img.shields.io/npm/v/jev-auto-router" />
-  </a>
+  <img alt="npm publish pending" src="https://img.shields.io/badge/npm-publish%20pending-lightgrey" />
 </p>
 
 <p align="center">
@@ -65,20 +63,10 @@ If you use Codex and often spend `frontier + high effort` on routine turns:
 
 ## Install
 
-### npm
+> [!IMPORTANT]
+> The npm registry release does not exist yet; use the source install now. The npm commands become available after the first publish.
 
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-Or run without a global install:
-
-```sh
-npx -y jev-auto-router
-```
-
-### From source
+### From source (available now)
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -87,6 +75,19 @@ npm ci
 npm run build
 npm link
 jev-codex
+```
+
+### npm (after release)
+
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+Or:
+
+```sh
+npx -y jev-auto-router
 ```
 
 ### Codex app
@@ -307,7 +308,7 @@ src/codex-router/
 
 - Version: `0.1.0`
 - Git tag: `v0.1.0`
-- npm package: `jev-auto-router`
+- npm registry: **not published**
 - Release process: [docs/releasing.md](docs/releasing.md)
 - CI: `.github/workflows/ci.yml`
 - Release workflow: `.github/workflows/release.yml` (tag `v*` or manual)

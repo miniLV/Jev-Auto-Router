@@ -24,9 +24,7 @@
     <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
   </a>
   <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
-  <a href="https://www.npmjs.com/package/jev-auto-router">
-    <img alt="npm" src="https://img.shields.io/npm/v/jev-auto-router" />
-  </a>
+  <img alt="npm publish pending" src="https://img.shields.io/badge/npm-publish%20pending-lightgrey" />
 </p>
 
 <p align="center">
@@ -65,20 +63,10 @@
 
 ## 安装
 
-### npm
+> [!IMPORTANT]
+> npm registry 版本还没有发布；当前请从源码安装。npm 命令在首次发布后可用。
 
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-或者不全局安装：
-
-```sh
-npx -y jev-auto-router
-```
-
-### 从源码
+### 从源码（当前可用）
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -87,6 +75,19 @@ npm ci
 npm run build
 npm link
 jev-codex
+```
+
+### npm（发布后可用）
+
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+或者：
+
+```sh
+npx -y jev-auto-router
 ```
 
 ### Codex app
