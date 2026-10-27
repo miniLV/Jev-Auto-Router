@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Turn Router · Control Loop</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #6d675d;
+      --grid: rgba(37,42,49,.055);
+      --orange: #d76838;
+      --orange-soft: #ffe3ce;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff0b8;
+      --green: #3f8f52;
+      --green-soft: #dff1d4;
+      --teal: #20898d;
+      --teal-soft: #d6f1ee;
+      --blue: #3867d6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
+    }
+    .page { position: relative; width: 1500px; height: 900px; overflow: hidden; padding: 42px 50px; }
+    .kicker { color: var(--teal); font: 900 14px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
+    h1 { margin: 7px 0 0; font-size: 50px; line-height: 1.05; }
+    .subtitle { margin: 12px 0 0; color: var(--muted); font: 650 19px/1.4 "Avenir Next", "PingFang SC", sans-serif; }
+    .card {
+      position: absolute;
+      z-index: 3;
+      width: 500px;
+      height: 160px;
+      padding: 17px 22px;
+      border: 3.5px solid var(--stroke);
+      border-radius: 24px 19px 26px 20px;
+      background: var(--fill);
+      box-shadow: 8px 9px 0 rgba(37,42,49,.11);
+      transform: rotate(var(--tilt));
+    }
+    .card h2 { margin: 0 0 8px; font-size: 28px; line-height: 1.05; }
+    .card p { margin: 0; color: #3e4242; font: 700 16px/1.35 "Avenir Next", "PingFang SC", sans-serif; }
+    .card p + p { margin-top: 3px; }
+    .card code { font: 700 14px "SFMono-Regular", Menlo, monospace; background: rgba(255,255,255,.55); padding: 1px 5px; border-radius: 5px; }
+    .pick { left: 100px; top: 200px; --stroke: var(--orange); --fill: var(--orange-soft); --tilt: -.5deg; }
+    .gate { left: 900px; top: 200px; --stroke: var(--yellow); --fill: var(--yellow-soft); --tilt: .5deg; }
+    .run { left: 900px; top: 600px; --stroke: var(--green); --fill: var(--green-soft); --tilt: -.4deg; }
+    .learn { left: 100px; top: 600px; --stroke: var(--teal); --fill: var(--teal-soft); --tilt: .4deg; }
+    .center {
+      position: absolute;
+      left: 600px;
+      top: 405px;
+      width: 300px;
+      height: 120px;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 12px 18px;
+      border: 3.5px solid var(--blue);
+      border-radius: 26px 20px 28px 22px;
+      background: rgba(255,252,243,.94);
+      box-shadow: 8px 9px 0 rgba(37,42,49,.1);
+      transform: rotate(-.5deg);
+    }
+    .center .eyebrow { color: var(--blue); font: 900 12px "Avenir Next", "PingFang SC", sans-serif; letter-spacing: .14em; }
+    .center h2 { margin: 4px 0 0; font-size: 28px; line-height: 1.05; }
+    .center p { margin: 4px 0 0; color: var(--muted); font: 700 13px "Avenir Next", "PingFang SC", sans-serif; }
+    .footer {
+      position: absolute;
+      left: 50px;
+      right: 50px;
+      bottom: 38px;
+      padding: 9px 16px;
+      border: 2.5px solid var(--ink);
+      border-radius: 13px 10px 15px 11px;
+      background: rgba(255,252,243,.9);
+      box-shadow: 4px 4px 0 rgba(37,42,49,.08);
+      font: 800 15px/1.35 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .footer b { color: var(--orange); }
+    svg.paths { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+    .main { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX TURN ROUTER · CONTROL LOOP</div>
+    <h1>A Turn's Four Decisions</h1>
+    <p class="subtitle">Model stays pinned; effort can move. One decision per turn.</p>
+
+    <svg class="paths" width="1500" height="900" viewBox="0 0 1500 900" aria-hidden="true">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+          <path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/>
+        </marker>
+      </defs>
+      <path class="main" d="M 608 280 L 892 280"/>
+      <path class="main" d="M 1150 368 L 1150 592"/>
+      <path class="main" d="M 892 680 L 608 680"/>
+      <path class="main" d="M 350 592 L 350 368"/>
+    </svg>
+
+    <section class="card pick">
+      <h2>① Pick · Jev once</h2>
+      <p>model + effort</p>
+      <p>prompt / candidates / scores</p>
+    </section>
+
+    <section class="card gate">
+      <h2>② Gate · deterministic policy</h2>
+      <p>price break-even</p>
+      <p>cache · session · upgrade trigger</p>
+    </section>
+
+    <section class="card run">
+      <h2>③ Run · model pinned</h2>
+      <p>tool loop reuses it; no re-route</p>
+      <p>effort via <code>configuration_update</code></p>
+    </section>
+
+    <section class="card learn">
+      <h2>④ Learn · observe & persist</h2>
+      <p>usage → cache warmth</p>
+      <p>session pin / compaction reset</p>
+    </section>
+
+    <div class="center">
+      <div>
+        <div class="eyebrow">CACHE-SAFE</div>
+        <h2>model pinned<br>effort can move</h2>
+        <p>one decision per turn</p>
+      </div>
+    </div>
+
+    <div class="footer"><b>Rule:</b> lower effort first; pay for a model switch only after break-even. Never switch inside a tool loop.</div>
+  </main>
+</body>
+</html>

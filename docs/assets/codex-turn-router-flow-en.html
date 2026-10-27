@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex Turn Router · Main Flow</title>
+  <style>
+    :root {
+      --paper: #f8f5ec;
+      --ink: #252a31;
+      --muted: #625e56;
+      --grid: rgba(37, 42, 49, .055);
+      --blue: #3867d6;
+      --blue-soft: #e0eaff;
+      --teal: #20898d;
+      --teal-soft: #d5f2ee;
+      --green: #3f8f52;
+      --green-soft: #e1f2d7;
+      --orange: #d76838;
+      --orange-soft: #ffe5d1;
+      --yellow: #d1a52b;
+      --yellow-soft: #fff1b5;
+      --pink: #d35f84;
+      --pink-soft: #ffe3eb;
+      --red: #b84736;
+      --red-soft: #ffe1da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    }
+    .page {
+      position: relative;
+      width: 1600px;
+      height: 1000px;
+      overflow: hidden;
+      background:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+        var(--paper);
+      background-size: 34px 34px;
+    }
+    .kicker {
+      position: absolute;
+      top: 37px;
+      left: 56px;
+      color: var(--teal);
+      font: 900 15px "Avenir Next", "PingFang SC", sans-serif;
+      letter-spacing: .16em;
+    }
+    h1 {
+      position: absolute;
+      top: 60px;
+      left: 53px;
+      margin: 0;
+      font-size: 46px;
+      line-height: 1.12;
+    }
+    .subtitle {
+      position: absolute;
+      top: 116px;
+      left: 56px;
+      width: 1020px;
+      color: var(--muted);
+      font: 700 18px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp {
+      position: absolute;
+      top: 42px;
+      right: 54px;
+      width: 330px;
+      padding: 12px 18px;
+      border: 3px solid var(--green);
+      border-radius: 19px 15px 21px 16px;
+      background: var(--green-soft);
+      box-shadow: 7px 7px 0 rgba(37,42,49,.1);
+      transform: rotate(1.2deg);
+      font: 800 15px/1.45 "Avenir Next", "PingFang SC", sans-serif;
+    }
+    .stamp b {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--green);
+      font-family: "Chalkboard SE", "Marker Felt", "PingFang SC", sans-serif;
+      font-size: 19px;
+    }
+    .lane {
+      position: absolute;
+      border: 2px dashed rgba(37,42,49,.29);
+      border-radius: 28px 23px 30px 25px;
+      background: rgba(255,255,255,.3);
+    }
+    .lane.flow { left: 45px; top: 180px; width: 1000px; height: 760px; }
+    .lane.notes { left: 1085px; top: 180px; width: 470px; height: 760px; }
+    .lane-label {
+      position: absolute;
+      left: 28px;
+      top: -17px;
+      padding: 4px 14px;
+      border: 2.5px solid var(--ink);
+      border-radius: 14px 11px 15px 12px;
+      background: var(--paper);
+      font-size: 17px;
+      font-weight: 900;
+      z-index: 6;
+    }
+    .card {
+      position: absolute;
+      z-index: 3;
+      padding: 8px 14px;
+      border: 3px solid var(--stroke);
+      border-radius: 19px 15px 21px 16px;
+      background: var(--fill);
+      box-shadow: 7px 8px 0 rgba(37,42,49,.11);
+      transform: rotate(var(--tilt, 0deg));
+    }
+    .blue { --stroke: var(--blue); --fill: var(--blue-soft); }
+    .teal { --stroke: var(--teal); --fill: var(--teal-soft); }
+    .green { --stroke: var(--green); --fill: var(--green-soft); }
+    .orange { --stroke: var(--orange); --fill: var(--orange-soft); }
+    .yellow { --stroke: var(--yellow); --fill: var(--yellow-soft); }
+    .pink { --stroke: var(--pink); --fill: var(--pink-soft); }
+    .red { --stroke: var(--red); --fill: var(--red-soft); }
+    .card h2 { margin: 0; font-size: 18px; line-height: 1.12; }
+    .card p { margin: 3px 0 0; color: #3f4242; font: 700 12px/1.35 "Avenir Next", "PingFang SC", sans-serif; }
+    .step { left: 85px; width: 240px; height: 58px; }
+    .s1 { top: 225px; --tilt: -.5deg; }
+    .s2 { top: 320px; --tilt: .5deg; }
+    .s3 { top: 415px; --tilt: -.4deg; }
+    .s4 { top: 510px; --tilt: .4deg; }
+    .s5 { top: 605px; --tilt: -.5deg; }
+    .s6 { top: 700px; --tilt: .5deg; }
+    .branch {
+      left: 520px;
+      top: 415px;
+      width: 250px;
+      height: 58px;
+      --tilt: .4deg;
+    }
+    .tool {
+      left: 85px;
+      top: 800px;
+      width: 850px;
+      height: 70px;
+      --tilt: -.2deg;
+    }
+    .tool h2 { font-size: 21px; }
+    .tool p { font-size: 13px; }
+    .note {
+      left: 1120px;
+      width: 400px;
+      padding: 14px 17px;
+      box-shadow: 6px 7px 0 rgba(37,42,49,.1);
+    }
+    .note h2 { font-size: 20px; margin-bottom: 7px; color: var(--stroke); }
+    .note p { margin: 0; font-size: 13px; line-height: 1.5; }
+    .n1 { top: 225px; height: 215px; --tilt: -.3deg; }
+    .n2 { top: 465px; height: 175px; --tilt: .35deg; }
+    .n3 { top: 665px; height: 255px; --tilt: -.3deg; }
+    .edge-label {
+      position: absolute;
+      z-index: 7;
+      padding: 2px 8px;
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--muted);
+      font: 800 12px "Avenir Next", "PingFang SC", sans-serif;
+      white-space: nowrap;
+    }
+    svg.paths { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .flow { fill: none; stroke: var(--ink); stroke-width: 2.8; stroke-linejoin: round; marker-end: url(#arrow-ink); }
+    .branch-line { fill: none; stroke: #8b857b; stroke-width: 2.4; stroke-dasharray: 8 6; stroke-linejoin: round; marker-end: url(#arrow-muted); }
+    .loop { fill: none; stroke: var(--pink); stroke-width: 2.7; stroke-dasharray: 8 7; stroke-linejoin: round; marker-end: url(#arrow-pink); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="kicker">CODEX TURN ROUTER</div>
+    <h1>Codex Turn Router | Main Flow</h1>
+    <div class="subtitle">One Jev decision per user turn; the model stays fixed inside the tool loop.</div>
+    <div class="stamp"><b>Core rule</b>Model fixed inside a turn; effort can move; re-evaluate only on the next turn.</div>
+
+    <div class="lane flow"><span class="lane-label">① Request path</span></div>
+    <div class="lane notes"><span class="lane-label">② Decisions and boundaries</span></div>
+
+    <svg class="paths" width="1600" height="1000" viewBox="0 0 1600 1000" aria-hidden="true">
+      <defs>
+        <marker id="arrow-ink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#252a31"/></marker>
+        <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#8b857b"/></marker>
+        <marker id="arrow-pink" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L10 5 L0 10 Z" fill="#d35f84"/></marker>
+      </defs>
+      <path class="flow" d="M205 283 L205 311"/>
+      <path class="flow" d="M205 378 L205 406"/>
+      <path class="flow" d="M205 473 L205 501"/>
+      <path class="flow" d="M205 568 L205 596"/>
+      <path class="flow" d="M205 663 L205 691"/>
+      <path class="flow" d="M205 758 L205 791"/>
+      <path class="branch-line" d="M325 444 L512 444"/>
+      <path class="branch-line" d="M645 473 L645 800"/>
+      <path class="loop" d="M85 835 L55 835 L55 254 L77 254"/>
+    </svg>
+
+    <section class="card blue step s1"><h2>You send a message</h2><p>start of a turn</p></section>
+    <section class="card teal step s2"><h2>jev-codex wrapper</h2><p>launch Codex; temp provider</p></section>
+    <section class="card yellow step s3"><h2>fresh user turn?</h2><p>new user message?</p></section>
+    <section class="card orange step s4"><h2>Ask Jev once</h2><p>prompt + model + candidates</p></section>
+    <section class="card yellow step s5"><h2>Policy gates</h2><p>user / confidence / price / cache</p></section>
+    <section class="card green step s6"><h2>Pin this turn's model</h2><p>effort via configuration_update</p></section>
+    <section class="card blue branch"><h2>No: reuse model</h2><p>tool result / continue</p></section>
+    <section class="card green tool"><h2>Tool Loop: same model</h2><p>model ↔ tools; effort set at turn start. Jev latency only on the first hop.</p></section>
+
+    <section class="card yellow note n1">
+      <h2>What the gates check</h2>
+      <p>
+        ① user says use ... → user wins<br>
+        ② Jev failure / low confidence → keep<br>
+        ③ low confidence never downgrades<br>
+        ④ price / cache → downgrade break-even<br>
+        ⑤ upgrade needs failure / high complexity<br>
+        ⑥ target tier unavailable → move up
+      </p>
+    </section>
+    <section class="card orange note n2">
+      <h2>Cache boundary</h2>
+      <p>
+        switching model = one prefix rebuild.<br>
+        price table + remaining turns → break-even.<br>
+        cold cache → downgrade can pass.<br>
+        after N turns / budget spent → lock.
+      </p>
+    </section>
+    <section class="card teal note n3">
+      <h2>Effort & persistence</h2>
+      <p>
+        request-level effort stays as baseline;<br>
+        effort changes use <code>configuration_update</code>;<br>
+        replay prior updates in place, keep prefix cacheable;<br>
+        session.json persists pin / counters;<br>
+        compaction resets cache and effort.
+      </p>
+    </section>
+
+    <div class="edge-label" style="left: 345px; top: 424px;">No: tool continuation</div>
+    <div class="edge-label" style="left: 655px; top: 615px;">tool result returns</div>
+    <div class="edge-label" style="left: 68px; top: 196px; color: var(--pink);">next turn</div>
+  </main>
+</body>
+</html>
