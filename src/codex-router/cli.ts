@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { loadConfig } from "./config.js";
 import { startCodexProxy } from "./proxy.js";
+import { runAppSetup } from "./app-setup.js";
 import { createSessionStore } from "./session-store.js";
 import { AUTO_MODEL } from "./types.js";
 
@@ -74,6 +75,10 @@ export function buildCodexArgs(baseURL: string, args: readonly string[]): string
 
 export async function runCodex(): Promise<void> {
   loadEnvFiles();
+  if (process.argv[2] === "setup-app") {
+    await runAppSetup(process.argv.slice(3));
+    return;
+  }
   const command = resolveCodex();
   if (!command) {
     process.stderr.write(

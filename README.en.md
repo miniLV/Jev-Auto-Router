@@ -46,9 +46,10 @@ jev-codex
 `jev-codex` does not fork Codex. It launches the real Codex CLI, injects a temporary provider, and (by default) adds one virtual model to the Codex CLI model picker / `/model`:
 
 ```text
-jev-auto      Jev Auto Router
-gpt-6-sol
-gpt-6.1-sol
+Jev Auto Router
+GPT-6-Luna
+GPT-5.6-Terra
+GPT-5.6-Luna
 ...
 ```
 
@@ -57,12 +58,36 @@ Selecting `jev-auto` enables routing; selecting a real model bypasses it. This i
 Notes:
 
 - `JEV_API_KEY` / `TYPESAFE_API_KEY` is required. Without a key, `jev-codex` launches Codex without routing, and `jev-auto` will not appear.
-- This version covers **Codex CLI** only. The Codex app is not wired to this wrapper yet; if the app supports a custom provider, it could point to the local proxy, but that is untested and undocumented.
+- The Codex app uses the same local provider; configure it with `jev-codex setup-app`.
 - The actual list depends on your account catalog; the model names above are illustrative.
+
+### Codex CLI
 
 ![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
 
 The real Codex model picker: `Jev Auto Router` is the virtual entry; real models remain directly selectable.
+
+### Codex app
+
+![Codex app model picker with Jev Auto Router](docs/assets/codex-app-model-picker.png)
+
+Codex app: create a new task and select Jev Auto Router; existing tasks keep their original provider.
+
+Configure the Codex app (ChatGPT/Codex app on macOS):
+
+```sh
+jev-codex setup-app
+```
+
+It will:
+
+- back up `~/.codex/config.toml`;
+- add `model_provider = "jev"` and the local provider;
+- generate a model catalog containing `Jev Auto Router`;
+- start the local proxy.
+
+Then **fully quit** the ChatGPT/Codex app (`Cmd+Q`), reopen it, **create a new task**, and select `Jev Auto Router` in the model picker.
+
 
 ## Why turn-pinned, not every model call
 

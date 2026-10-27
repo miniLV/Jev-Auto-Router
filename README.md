@@ -46,9 +46,10 @@ jev-codex
 `jev-codex` 不需要 fork Codex。它启动真实的 Codex CLI，注入一个临时 provider；默认启动时，在 Codex CLI 的 model picker / `/model` 里会多出一个虚拟模型：
 
 ```text
-jev-auto      Jev Auto Router
-gpt-6-sol
-gpt-6.1-sol
+Jev Auto Router
+GPT-6-Luna
+GPT-5.6-Terra
+GPT-5.6-Luna
 ...
 ```
 
@@ -57,12 +58,36 @@ gpt-6.1-sol
 注意：
 
 - 需要 `JEV_API_KEY` / `TYPESAFE_API_KEY`。没有 key 时 `jev-codex` 会启动 Codex 但不启用路由，model list 里不会出现 `jev-auto`。
-- 当前只覆盖 **Codex CLI**。Codex app 还没有接入这个 wrapper；如果 app 支持自定义 provider，理论上可以指向本地代理，但未验证、未文档化。
+- Codex app 通过同一套本地 provider 接入；用 `jev-codex setup-app` 配置。
 - 实际列表取决于你的账号目录；上面的模型名是示意，不是固定阵容。
+
+### Codex CLI
 
 ![Codex model picker with Jev Auto Router](docs/assets/model-picker-jev-auto.png)
 
 真实 Codex model picker：`Jev Auto Router` 是虚拟 entry；下面的真实模型仍然可以直接选择。
+
+### Codex app
+
+![Codex app model picker with Jev Auto Router](docs/assets/codex-app-model-picker.png)
+
+Codex app：新建 task 后选择 Jev Auto Router；已有 task 会保留原来的 provider。
+
+配置 Codex app（macOS 的 ChatGPT/Codex app）：
+
+```sh
+jev-codex setup-app
+```
+
+这个命令会：
+
+- 备份 `~/.codex/config.toml`；
+- 写入 `model_provider = "jev"` 和本地 provider；
+- 生成包含 `Jev Auto Router` 的 model catalog；
+- 启动本地 proxy。
+
+然后**完全退出** ChatGPT/Codex app（`Cmd+Q`），重新打开，**新建一个 task**，在 model picker 里选择 `Jev Auto Router`。
+
 
 ## 为什么是 turn，而不是每次 model call
 
