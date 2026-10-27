@@ -1,36 +1,72 @@
-# Jev Auto Router
+<h1 align="center">Jev Auto Router</h1>
 
-[中文](README.md) | **[English](README.en.md)**
+<p align="center">
+  <strong>One model decision per Codex user turn.</strong>
+</p>
 
-**One model decision per Codex user turn.** `jev-codex` launches the real Codex CLI, adds a virtual `jev-auto` model to the picker, asks [TypeSafe Jev](https://docs.typesafe.ai/introduction) once per fresh user turn, and keeps the selected model pinned through the entire tool loop.
+<p align="center">
+  <code>jev-codex</code> launches the real Codex CLI, adds <code>Jev Auto Router</code> to the model picker, asks TypeSafe Jev once per fresh user turn, and keeps the selected model pinned through the tool loop. Effort moves through cache-preserving <code>configuration_update</code> items.
+</p>
 
-This is the first **turn-pinned Codex router**. It prioritizes a working loop, fewer switches, and cache-friendly behavior. The old per-call path is gone from the main entrypoint.
+<p align="center">
+  <a href="https://github.com/miniLV/Jev-Auto-Router/tags">Releases</a> ·
+  <a href="https://minilv.github.io/Jev-Auto-Router/">Homepage</a> ·
+  <a href="./README.md">简体中文</a> ·
+  <strong>English</strong>
+</p>
 
-![Codex Turn Router main flow](docs/assets/codex-turn-router-flow-en.png)
+<p align="center">
+  <a href="https://github.com/miniLV/Jev-Auto-Router/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/miniLV/Jev-Auto-Router/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <img alt="Release v0.1.0" src="https://img.shields.io/badge/release-v0.1.0-blue" />
+  <a href="./LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
+  </a>
+  <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
+  <img alt="npm not published" src="https://img.shields.io/badge/npm-not%20published-lightgrey" />
+</p>
 
-![Codex Turn Router control loop](docs/assets/codex-turn-router-control-plane-en.png)
+<p align="center">
+  <img src="docs/assets/model-picker-jev-auto.png" alt="Codex model picker with Jev Auto Router" width="860" />
+</p>
 
-The control loop: pick → gate → run → learn.
+---
 
-- Usage, configuration and design trade-offs: [docs/codex-turn-router.md](docs/codex-turn-router.md)
-- Test samples and methods: [docs/evaluation-plan.md](docs/evaluation-plan.md)
+## 30-second version
+
+If you use Codex and often spend `frontier + high effort` on routine turns:
+
+- **one Jev decision per user turn**, not per model call;
+- **the model stays pinned** through the tool loop, avoiding repeated prefix rebuilds;
+- **effort is the fine control**, changed through `configuration_update` while preserving cache;
+- price break-even, cache warmth, session guards and upgrade triggers are deterministic policy;
+- supports **Codex CLI** and the **Codex app**.
+
+> **Status:** `v0.1.0` alpha; 63 deterministic tests pass; live GPT cache/quality evaluation is still pending. Effort routing is off by default.
+
+## What it does
+
+| Capability | What it means |
+| --- | --- |
+| Turn-pinned routing | One Jev decision per user turn; the model does not change inside the tool loop |
+| Effort routing | Same model; low/medium/high/xhigh/max can move per turn |
+| Cache-aware gates | Price break-even, cache warmth, large-context and session guards |
+| Codex CLI | `jev-codex` launches real Codex with the `Jev Auto Router` entry |
+| Codex app | `jev-codex setup-app` configures the local provider and model catalog |
+| Evidence | 63 deterministic tests; a live savings evaluation plan is in the repo |
+
+- Design notes: [docs/codex-turn-router.md](docs/codex-turn-router.md)
+- Evaluation plan: [docs/evaluation-plan.md](docs/evaluation-plan.md)
+- Releasing: [docs/releasing.md](docs/releasing.md)
+
 
 ## Install
 
-After the npm package is published:
+> [!IMPORTANT]
+> The npm registry release does not exist yet (`npm view jev-auto-router` returns 404). Use the source install now; the npm commands below become available after the first publish.
 
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-Or run it without a global install:
-
-```sh
-npx -y jev-auto-router
-```
-
-From source:
+### From source (available now)
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -40,6 +76,27 @@ npm run build
 npm link
 jev-codex
 ```
+
+### npm (after release)
+
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+Or:
+
+```sh
+npx -y jev-auto-router
+```
+
+### Codex app
+
+```sh
+jev-codex setup-app
+```
+
+Then fully quit and reopen the ChatGPT/Codex app, create a new task, and select `Jev Auto Router`. See [Codex app](#codex-app) and [releasing](docs/releasing.md).
 
 ## Result: one extra model in the picker
 
@@ -123,7 +180,7 @@ Illustrative, not a measured bill. Real savings depend on the cache hit rate, th
 > [!WARNING]
 > Alpha: effort routing is off by default, and `configuration_update` has not been validated against a live Codex + GPT cache yet. Set `JEV_CODEX_EFFORT_ROUTING=turn` for a small smoke test before enabling it long-term.
 
-## Quickstart
+## Usage
 
 Requires Node.js 22+, a signed-in Codex CLI, and a TypeSafe Jev key.
 
@@ -245,6 +302,15 @@ src/codex-router/
 - Break-even uses estimated output and remaining-turn values, not a provider invoice.
 - Encrypted reasoning cleanup is opt-in; compaction still needs live-session tests.
 - Commentary modifies the Codex event stream; set `JEV_CODEX_COMMENTARY=0` for byte-identical forwarding.
+
+## Release status
+
+- Version: `0.1.0`
+- Git tag: `v0.1.0`
+- npm registry: **not published**
+- Release process: [docs/releasing.md](docs/releasing.md)
+- CI: `.github/workflows/ci.yml`
+- Release workflow: `.github/workflows/release.yml` (tag `v*` or manual)
 
 ## License
 

@@ -1,36 +1,72 @@
-# Jev Auto Router
+<h1 align="center">Jev Auto Router</h1>
 
-**[中文](README.md)** | [English](README.en.md)
+<p align="center">
+  <strong>Codex 一轮对话，一次模型选择。</strong>
+</p>
 
-**Codex 一轮对话，一次模型选择。** `jev-codex` 启动真实的 Codex CLI，在模型选择器里加入虚拟模型 `jev-auto`；每个新 user turn 问一次 [TypeSafe Jev](https://docs.typesafe.ai/introduction)，然后把选中的模型固定到这一轮的整个 tool loop。
+<p align="center">
+  <code>jev-codex</code> 启动真实 Codex CLI，在 model picker 里加入 <code>Jev Auto Router</code>；每个新 user turn 问一次 TypeSafe Jev，模型固定跑完整个 tool loop，effort 用 cache-preserving 的 <code>configuration_update</code> 调整。
+</p>
 
-这是 **turn-pinned Codex router** 的第一版。它优先保证能跑、切换少、缓存友好；旧逐调用路径已经从主入口移除。
+<p align="center">
+  <a href="https://github.com/miniLV/Jev-Auto-Router/tags">Releases</a> ·
+  <a href="https://minilv.github.io/Jev-Auto-Router/">Homepage</a> ·
+  <strong>简体中文</strong> ·
+  <a href="./README.en.md">English</a>
+</p>
 
-![Codex Turn Router 主流程](docs/assets/codex-turn-router-flow.png)
+<p align="center">
+  <a href="https://github.com/miniLV/Jev-Auto-Router/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/miniLV/Jev-Auto-Router/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <img alt="Release v0.1.0" src="https://img.shields.io/badge/release-v0.1.0-blue" />
+  <a href="./LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/miniLV/Jev-Auto-Router" />
+  </a>
+  <img alt="Node 22+" src="https://img.shields.io/badge/node-22%2B-339933" />
+  <img alt="npm not published" src="https://img.shields.io/badge/npm-not%20published-lightgrey" />
+</p>
 
-![Codex Turn Router 控制回路](docs/assets/codex-turn-router-control-plane.png)
+<p align="center">
+  <img src="docs/assets/model-picker-jev-auto.png" alt="Codex model picker with Jev Auto Router" width="860" />
+</p>
 
-控制回路：选 → 闸 → 跑 → 学。
+---
 
-- 使用、配置与设计取舍：[docs/codex-turn-router.md](docs/codex-turn-router.md)
-- 测试样本与方法：[docs/evaluation-plan.md](docs/evaluation-plan.md)
+## 30 秒看懂
+
+如果你用 Codex，并且经常用 `frontier + high effort` 处理本来很简单的 turn，这个项目解决的就是这件事：
+
+- **一个 user turn 只问一次 Jev**，不是每次 model call 都问；
+- **模型固定**到这一轮的整个 tool loop，避免反复重建 prompt cache；
+- **effort 单独调整**，用 `configuration_update` 保留 cache；
+- 价格 break-even、缓存热度、session 稳定和升级触发都由本地 policy 决定；
+- 支持 **Codex CLI** 和 **Codex app**。
+
+> **当前状态：** `v0.1.0` alpha；63 个确定性测试通过；真实 GPT cache/质量评测还在补。effort routing 默认关闭。
+
+## 能做什么
+
+| 能力 | 说明 |
+| --- | --- |
+| Turn-pinned routing | 一个 user turn 一次 Jev 决策；tool loop 内模型不变 |
+| Effort routing | 模型不变，按 turn 调整 low/medium/high/xhigh/max |
+| Cache-aware gates | 价格 break-even、cache 热度、大上下文和 session 稳定保护 |
+| Codex CLI | `jev-codex` 启动真实 Codex，并注入 `Jev Auto Router` |
+| Codex app | `jev-codex setup-app` 配置本地 provider 和 model catalog |
+| Evidence | 63 个确定性测试；真实收益评测计划已落地 |
+
+- 设计文档：[docs/codex-turn-router.md](docs/codex-turn-router.md)
+- 评测计划：[docs/evaluation-plan.md](docs/evaluation-plan.md)
+- 发布说明：[docs/releasing.md](docs/releasing.md)
+
 
 ## 安装
 
-发布到 npm 后：
+> [!IMPORTANT]
+> npm registry 版本还没有发布（`npm view jev-auto-router` 是 404）。当前请从源码安装；npm 发布后再使用下面的 npm 命令。
 
-```sh
-npm install -g jev-auto-router
-jev-codex
-```
-
-或者不全局安装：
-
-```sh
-npx -y jev-auto-router
-```
-
-从源码：
+### 从源码（当前可用）
 
 ```sh
 git clone https://github.com/miniLV/Jev-Auto-Router.git
@@ -40,6 +76,27 @@ npm run build
 npm link
 jev-codex
 ```
+
+### npm（发布后可用）
+
+```sh
+npm install -g jev-auto-router
+jev-codex
+```
+
+或者：
+
+```sh
+npx -y jev-auto-router
+```
+
+### Codex app
+
+```sh
+jev-codex setup-app
+```
+
+然后完全退出并重开 ChatGPT/Codex app，新建 task，选择 `Jev Auto Router`。详见下面的 [Codex app](#codex-app) 和 [发布说明](docs/releasing.md)。
 
 ## 结果：model list 里多一个 `jev-auto`
 
@@ -123,7 +180,7 @@ Session
 > [!WARNING]
 > Alpha：effort routing 默认关闭，且 `configuration_update` 的实机 cache 行为还没有在真实 Codex + GPT 会话中验证。先设 `JEV_CODEX_EFFORT_ROUTING=turn` 做一次小任务 smoke，再长期开启。
 
-## 快速开始
+## 运行
 
 需要 Node.js 22+、已登录的 Codex CLI、TypeSafe Jev key。
 
@@ -245,6 +302,15 @@ src/codex-router/
 - break-even 使用输出估算和剩余 turn 估算，不是供应商账单。
 - encrypted reasoning 清理是 opt-in，压缩行为仍需要实机验证。
 - commentary 会修改 Codex 事件流；需要字节级原样转发时设 `JEV_CODEX_COMMENTARY=0`。
+
+## 发布与版本
+
+- 当前版本：`0.1.0`
+- Git tag：`v0.1.0`
+- npm registry：**尚未发布**
+- 发布流程：[docs/releasing.md](docs/releasing.md)
+- CI：`.github/workflows/ci.yml`
+- Release workflow：`.github/workflows/release.yml`（tag `v*` 或手动触发）
 
 ## License
 
