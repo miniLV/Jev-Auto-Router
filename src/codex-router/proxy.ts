@@ -13,7 +13,7 @@ import {
 } from "./config.js";
 import { askJev } from "./jev.js";
 import { createDecisionLog, type DecisionLog } from "./log.js";
-import { decide, shouldUseExactModel } from "./policy.js";
+import { decide, detectOverride, shouldUseExactModel } from "./policy.js";
 import { conversationKey, estimateContextTokens, freshTurnPrompt, hashPrompt, promptChars, type ResponsesBody } from "./turn.js";
 import type { JevResult, ModelCandidate, RouteInput, RouterConfig, Tier } from "./types.js";
 import { AUTO_MODEL } from "./types.js";
@@ -25,6 +25,7 @@ export interface ProxyOptions {
   route?: RouteFn;
   log?: DecisionLog;
   port?: number;
+  now?: () => number;
 }
 
 export interface RunningProxy {
@@ -37,8 +38,26 @@ interface SessionState {
   tier: Tier;
   model: string;
   updatedAt: number;
+  turns: number;
+  switches: number;
+  turnsSinceSwitch: number;
   lastPromptHash?: string;
   lastContextTokens?: number;
+}
+
+/** Automatic switching stops once the session has used its stability budget. */
+function switchGuard(
+  turns: number,
+  switches: number,
+  turnsSinceSwitch: number,
+  config: RouterConfig,
+): string | undefined {
+  if (config.lockAfterTurns > 0 && turns > config.lockAfterTurns) return "session-lock";
+  if (config.maxSwitchesPerSession > 0 && switches >= config.maxSwitchesPerSession) return "switch-budget";
+  if (config.switchCooldownTurns > 0 && switches > 0 && turnsSinceSwitch < config.switchCooldownTurns) {
+    return "switch-cooldown";
+  }
+  return undefined;
 }
 
 interface RoutingSummary {
@@ -211,6 +230,7 @@ function errorMessage(error: unknown): string {
 
 export async function startCodexProxy(options: ProxyOptions): Promise<RunningProxy> {
   const { config } = options;
+  const clock = options.now ?? Date.now;
   const log = options.log ?? createDecisionLog(config.logFile);
   const route: RouteFn = options.route ?? ((input) => askJev({
     config,
@@ -330,15 +350,62 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
       let tier = currentTier;
 
       if (prompt) {
+        const now = clock();
         const contextTokens = estimateContextTokens(parsed.input);
         const promptHash = hashPrompt(prompt);
         const sameDecision = state?.lastPromptHash === promptHash && state.lastContextTokens === contextTokens;
+        const idleMs = state ? now - state.updatedAt : 0;
+        const expired = Boolean(state && idleMs > config.cacheTtlMs);
+        const turns = (expired ? 0 : state?.turns ?? 0) + 1;
+        const switches = expired ? 0 : state?.switches ?? 0;
+        const turnsSinceSwitch = expired ? 0 : state?.turnsSinceSwitch ?? 0;
+        const override = detectOverride(prompt, config.tiers);
+        const guard = override ? undefined : switchGuard(turns, switches, turnsSinceSwitch, config);
 
         if (sameDecision) {
           // Codex retries an identical request after a transport failure. Reuse
           // the turn's decision instead of asking Jev again or switching model.
           tier = state.tier;
           model = state.model;
+        } else if (guard) {
+          // A stable long session is often worth more than a late downgrade or
+          // an oscillation. Explicit user overrides bypass this guard.
+          tier = currentTier;
+          model = currentModel;
+          remember(sessions, key, {
+            tier,
+            model,
+            updatedAt: now,
+            turns,
+            switches,
+            turnsSinceSwitch: turnsSinceSwitch + 1,
+            lastPromptHash: promptHash,
+            lastContextTokens: contextTokens,
+          });
+          log.write({
+            at: new Date(now).toISOString(),
+            session: key,
+            prompt_hash: promptHash,
+            prompt_chars: promptChars(prompt),
+            context_tokens: contextTokens,
+            current_tier: currentTier,
+            current_model: currentModel,
+            chosen_tier: tier,
+            chosen_model: model,
+            confidence: null,
+            reason: guard,
+            changed: false,
+            jev_latency_ms: 0,
+            jev_model: "NONE",
+            session_turns: turns,
+            session_switches: switches,
+            turns_since_switch: turnsSinceSwitch + 1,
+          });
+          if (config.debug) {
+            process.stderr.write(
+              `[jev] ${key} ${currentTier}/${currentModel} -> ${tier}/${model} (${guard}) ctx~${contextTokens}\n`,
+            );
+          }
         } else {
           const result = await route({
             prompt,
@@ -367,10 +434,16 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             : tier === currentTier
               ? currentModel
               : modelForTier(available, tier) ?? currentModel;
+          const switched = model !== currentModel;
+          const nextSwitches = switches + (switched ? 1 : 0);
+          const nextTurnsSinceSwitch = switched ? 0 : turnsSinceSwitch + 1;
           remember(sessions, key, {
             tier,
             model,
-            updatedAt: Date.now(),
+            updatedAt: now,
+            turns,
+            switches: nextSwitches,
+            turnsSinceSwitch: nextTurnsSinceSwitch,
             lastPromptHash: promptHash,
             lastContextTokens: contextTokens,
           });
@@ -379,12 +452,12 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             model,
             confidence: result.answer?.confidence ?? null,
             reason: decision.reason,
-            changed: decision.changed || model !== currentModel,
+            changed: decision.changed || switched,
           };
           log.write({
-            at: new Date().toISOString(),
+            at: new Date(now).toISOString(),
             session: key,
-            prompt_hash: hashPrompt(prompt),
+            prompt_hash: promptHash,
             prompt_chars: promptChars(prompt),
             context_tokens: contextTokens,
             current_tier: currentTier,
@@ -397,6 +470,9 @@ export async function startCodexProxy(options: ProxyOptions): Promise<RunningPro
             jev_latency_ms: result.answer?.latencyMs ?? result.failure?.latencyMs ?? 0,
             jev_model: result.answer?.model ?? "UNKNOWN",
             scores: result.answer?.scores,
+            session_turns: turns,
+            session_switches: nextSwitches,
+            turns_since_switch: nextTurnsSinceSwitch,
           });
           if (config.debug) {
             process.stderr.write(

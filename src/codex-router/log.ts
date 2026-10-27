@@ -19,6 +19,9 @@ export interface DecisionRecord {
   jev_latency_ms: number;
   jev_model: string;
   scores?: JevScores;
+  session_turns: number;
+  session_switches: number;
+  turns_since_switch: number;
 }
 
 export interface DecisionLog {

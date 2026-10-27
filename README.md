@@ -73,8 +73,11 @@ jev-codex exec "fix the failing test"
 - Jev 失败、超时、答案非法或低置信：保持当前模型。
 - 低置信不降级；升级最多到 balanced。
 - 上下文超过阈值时，拒绝降级；升级仍可能。阈值是启发式，两个方向都要重建缓存。
+- 会话稳定保护：超过 12 个 fresh turn 后停止自动切换；每次切换后至少稳定 1 个 turn；可选切换次数上限。
+- 会话空闲超过 30 分钟后，稳定保护重置；模型仍保持，但下一轮可以重新评估。
 - 目标 tier 不可用：升到最近的可用 tier。
 - long tier 默认关闭，需要 `JEV_CODEX_ALLOW_LONG=1`。
+- 用户显式 `use ...` 永远绕过上述稳定保护。
 
 ## 配置
 
@@ -89,6 +92,10 @@ jev-codex exec "fix the failing test"
 | `JEV_CODEX_STRONG_MODEL` | `gpt-6.1-sol` | strong tier |
 | `JEV_CODEX_LONG_MODEL` | `gpt-6-astra` | long tier（默认关闭） |
 | `JEV_CODEX_DOWNGRADE_MAX_CONTEXT_TOKENS` | `20000` | 大上下文降级闸门 |
+| `JEV_CODEX_LOCK_AFTER_TURNS` | `12` | 超过 N 个 turn 后停止自动切换（0 = 关闭） |
+| `JEV_CODEX_MAX_SWITCHES` | `0` | 每个 session 最多切换次数（0 = 不限） |
+| `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | 切换后至少稳定几个 turn |
+| `JEV_CODEX_CACHE_TTL_MS` | `1800000` | 空闲多久后重置稳定保护 |
 | `JEV_CODEX_COMMENTARY` | `1` | 在 Codex 中显示路由结果 |
 | `JEV_CODEX_LOG_FILE` | `~/.codex-router/decisions.jsonl` | 脱敏决策日志 |
 

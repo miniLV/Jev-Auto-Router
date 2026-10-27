@@ -19,12 +19,16 @@ The design rationale, usage and configuration live in
 | Policy Gate | The deterministic layer that turns a Jev answer into the final tier: user override, confidence, availability and the cache downgrade gate. |
 | Cache Rebuild | The work a newly selected model must do to process a prompt prefix it has not cached. Every model switch pays it. |
 | Downgrade Gate | The rule that refuses a cheaper-tier switch when the estimated conversation context is above the configured threshold. |
+| Session Lock | The rule that stops automatic switching after a configured number of fresh turns. |
+| Switch Budget | The maximum number of model changes allowed in one session. |
+| Switch Cooldown | The minimum number of full turns a newly switched model stays pinned before another switch. |
+| Cache TTL | The idle interval after which the session stability guards reset because the old prefix cache would be cold anyway. |
 | Decision Record | A redacted record of one turn decision. It contains a prompt hash and length, never prompt text. |
 | Commentary | The optional one-line Codex event that reports the route. It can be disabled with `JEV_CODEX_COMMENTARY=0`. |
 
 ## Invariants
 
-- One Jev decision per fresh turn.
+- At most one Jev decision per fresh turn; session guards may skip it.
 - No model change inside a tool loop.
 - A concrete model selected by the user bypasses automatic routing.
 - Jev receives only the current prompt, current model, context size and candidates.

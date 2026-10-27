@@ -158,8 +158,8 @@
     .note h2 { font-size: 20px; margin-bottom: 7px; color: var(--stroke); }
     .note p { margin: 0; font-size: 13px; line-height: 1.5; }
     .n1 { top: 225px; height: 215px; --tilt: -.3deg; }
-    .n2 { top: 465px; height: 150px; --tilt: .35deg; }
-    .n3 { top: 640px; height: 255px; --tilt: -.3deg; }
+    .n2 { top: 465px; height: 175px; --tilt: .35deg; }
+    .n3 { top: 665px; height: 255px; --tilt: -.3deg; }
     .edge-label {
       position: absolute;
       z-index: 7;
@@ -227,6 +227,7 @@
       <p>
         切一次，重建一次。<br>
         大上下文挡住降级；升级仍可能。<br>
+        超过 N 轮 / 预算用完 → 锁定。<br>
         阈值是启发式，不是精确成本。
       </p>
     </section>

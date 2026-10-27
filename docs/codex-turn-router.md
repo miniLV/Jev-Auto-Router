@@ -76,6 +76,26 @@ Set `JEV_CODEX_COMMENTARY=0` to disable it.
 - An unavailable tier steps up to the nearest available tier.
 - The long tier is disabled unless `JEV_CODEX_ALLOW_LONG=1`.
 
+## Session stability
+
+A long session can lose more to repeated cache rebuilds than it gains from a
+late model change. Three optional guards protect the pinned model:
+
+- `JEV_CODEX_LOCK_AFTER_TURNS` (default `12`): after this many fresh turns,
+  automatic switching stops. `0` disables the lock.
+- `JEV_CODEX_MAX_SWITCHES` (default `0`, unlimited): stop automatic switching
+  after this many model changes in one session.
+- `JEV_CODEX_SWITCH_COOLDOWN_TURNS` (default `1`): after a switch, keep the new
+  model for at least one full turn before switching again.
+
+`JEV_CODEX_CACHE_TTL_MS` (default 30 minutes) resets the lock, switch budget and
+cooldown after the session has been idle past the cache lifetime. The model
+stays pinned, but the next turn may re-evaluate because the old cache would be
+cold anyway.
+
+An explicit `use <tier>` / `use <model>` always bypasses these guards. The
+guards are stability heuristics, not a price model.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -91,6 +111,10 @@ Set `JEV_CODEX_COMMENTARY=0` to disable it.
 | `JEV_CODEX_DEFAULT_MODEL` | strong tier | Model used before the first decision |
 | `JEV_CODEX_MIN_CONFIDENCE` | `0.3` | Minimum confidence |
 | `JEV_CODEX_DOWNGRADE_MAX_CONTEXT_TOKENS` | `20000` | Cache downgrade gate |
+| `JEV_CODEX_LOCK_AFTER_TURNS` | `12` | Stop automatic switching after N fresh turns (`0` = off) |
+| `JEV_CODEX_MAX_SWITCHES` | `0` | Max model changes per session (`0` = unlimited) |
+| `JEV_CODEX_SWITCH_COOLDOWN_TURNS` | `1` | Full turns to keep a newly switched model |
+| `JEV_CODEX_CACHE_TTL_MS` | `1800000` | Idle time before guards reset |
 | `JEV_CODEX_JEV_TIMEOUT_MS` | `1500` | Per-attempt timeout |
 | `JEV_CODEX_JEV_DEADLINE_MS` | `3000` | Total deadline |
 | `JEV_CODEX_COMMENTARY` | `1` | Show a routing line in Codex |

@@ -15,6 +15,9 @@ export const DEFAULT_TIERS: TierModels = {
 
 export const DEFAULT_CONTEXT_WINDOW = 272_000;
 export const DEFAULT_DOWNGRADE_MAX_CONTEXT_TOKENS = 20_000;
+export const DEFAULT_LOCK_AFTER_TURNS = 12;
+export const DEFAULT_SWITCH_COOLDOWN_TURNS = 1;
+export const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000;
 export const DEFAULT_MIN_CONFIDENCE = 0.3;
 export const DEFAULT_JEV_MODEL = "jev-1.13.0";
 export const DEFAULT_JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -84,6 +87,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RouterConfig {
       DEFAULT_DOWNGRADE_MAX_CONTEXT_TOKENS,
       1,
     ),
+    lockAfterTurns: envInt(env, "JEV_CODEX_LOCK_AFTER_TURNS", DEFAULT_LOCK_AFTER_TURNS, 0),
+    maxSwitchesPerSession: envInt(env, "JEV_CODEX_MAX_SWITCHES", 0, 0),
+    switchCooldownTurns: envInt(env, "JEV_CODEX_SWITCH_COOLDOWN_TURNS", DEFAULT_SWITCH_COOLDOWN_TURNS, 0),
+    cacheTtlMs: envInt(env, "JEV_CODEX_CACHE_TTL_MS", DEFAULT_CACHE_TTL_MS, 1),
     contextWindowTokens: envInt(env, "JEV_CODEX_CONTEXT_WINDOW", DEFAULT_CONTEXT_WINDOW, 1),
     jevModel: envString(env, "JEV_MODEL") ?? DEFAULT_JEV_MODEL,
     jevEndpoint: envString(env, "JEV_ENDPOINT") ?? DEFAULT_JEV_ENDPOINT,

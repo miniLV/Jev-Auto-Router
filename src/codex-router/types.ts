@@ -34,6 +34,10 @@ export interface RouterConfig {
   minConfidence: number;
   uncertainCeiling: Tier;
   downgradeMaxContextTokens: number;
+  lockAfterTurns: number;
+  maxSwitchesPerSession: number;
+  switchCooldownTurns: number;
+  cacheTtlMs: number;
   contextWindowTokens: number;
   jevModel: string;
   jevEndpoint: string;
